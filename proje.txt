@@ -4,18 +4,19 @@ PROJE ADI: Advanced FastAPI JWT & Active Session Management Architecture
 
 1. PROJENİN AMACI VE KAPSAMI
 --------------------------------------------------------------------------------
-Bu projenin temel amacı, standart (stateless) JWT authentication mekanizmasını 
-ileri seviye bir oturum yönetimi (stateful session tracking) ve güvenlik katmanı 
-ile birleştirerek üretim seviyesinde (production-ready) bir backend mimarisi 
-oluşturmaktır.
+Bu proje, JWT tabanlı kimlik doğrulama akışlarını ve veritabanı destekli
+oturum yönetimini öğrenmek ve uygulamak amacıyla geliştirilmektedir. Access ve
+refresh token kullanımı; token iptali, oturum takibi, refresh token rotation ve
+parola sıfırlama akışlarıyla birlikte ele alınır. Proje geliştirme aşamasındadır;
+henüz üretim ortamında kullanıma hazır olduğu iddia edilmemektedir.
 
 Sistem, geleneksel "token üret, çereze at" yaklaşımının ötesine geçerek:
   - HTTPBearer standartlarına uyumlu Access Token yönetimi,
   - Veritabanı destekli dinamik oturum (Session) takibi,
-  - Çoklu cihaz geçmişi tutulurken "Tek Aktif Oturum" zorunluluğu,
+  - Geçmiş oturum kayıtlarını korurken kullanıcı başına tek aktif oturum,
   - Süresi dolmamış 15 dakikalık Access Token'lar için anlık iptal (Blacklist) mekanizması,
-sunacak şekilde tasarlanmıştır. Bu proje, gelecekteki tüm FastAPI projeleri için 
-bir mimari rehber ve referans kodu işlevi görecektir.
+sunacak şekilde tasarlanmıştır. Token ömürleri ve ortam ayarları yapılandırılabilir;
+15 dakika ve 7 gün değerleri varsayılan değerlerdir.
 
 
 2. MİMARİ VE TEKNİK ÖZELLİKLER
@@ -25,22 +26,32 @@ bir mimari rehber ve referans kodu işlevi görecektir.
 * Migration Engine: Alembic (Async mod)
 * Password Hashing: Argon2 (argon2-cffi)
 * Token Type: JWT PyJwt - HTTPBearer Bearer Flow
-* Token Lifetime: 
-    - Access Token: 15 Dakika (JSON Response / HTTPBearer Standard)
-    - Refresh Token: 7 Gün (HttpOnly, Secure Cookie)
+* Token Lifetime (varsayılan):
+    - Access Token: 15 dakika (JSON yanıtında, korumalı isteklerde Bearer token)
+    - Refresh Token: 7 gün (HttpOnly cookie)
+* Configuration: Pydantic Settings ile `.env` ve ortam değişkenleri
+* Email: FastAPI-Mail ile SMTP üzerinden parola sıfırlama e-postası
+* Tests: pytest; mevcut kapsam eşzamanlı kayıt çakışması testiyle sınırlı
+
+Refresh cookie'nin `Secure`, `SameSite` ve `Domain` ayarları; SMTP/TLS ayarları,
+SQL sorgu loglama seçeneği (`DB_ECHO`) ve ön yüz adresi ortama göre yapılandırılır.
+Dağıtım için örnek değerler `.env.example` dosyasındadır; gerçek `.env` dosyası
+yereldir ve Git tarafından yok sayılır.
 
 
 3. VERİTABANI ŞEMASI VE TABLO YAPILARI
 --------------------------------------------------------------------------------
-Sistem yerel PostgreSQL üzerinde aşağıdaki tablolarla çalışacaktır:
+Sistem PostgreSQL üzerinde aşağıdaki tabloları kullanır:
 
 A. users (Ana Kullanıcı Tablosu)
    - id (UUID, PK)
+   - name, surname, age
    - is_active (Boolean)
    - created_at / updated_at (DateTime)
 
 B. user_credentials (Kimlik Bilgileri - 1:1 İlişki)
-   - user_id (UUID, FK -> users.id, PK)
+   - id (UUID, PK)
+   - user_id (UUID, FK -> users.id, Unique)
    - email (String, Unique, Index)
    - phone_number (String, Optional)
    - password_hash (String - Argon2)
@@ -78,10 +89,18 @@ F. password_reset_tokens (şifre sıfırlama tablosu)
    - user_id (UUID, FK -> users.id)
    - token_hash (String,Unique)
    - expires_at (DateTime)
+<<<<<<< HEAD
    - used_at (DateTime)
    - revoked_at (DateTime)
    - created_at (DateTime)
    
+=======
+   - used_at (DateTime, Nullable)
+   - revoked_at (DateTime, Nullable)
+   - created_at (DateTime)
+
+
+>>>>>>> 35e1267 (proje.txt dosyası projenin güncel yapısına göre tekrar düzenlendi.)
 
 4. MANTIKSAL ÇALIŞMA ALGORİTMALARI
 --------------------------------------------------------------------------------
@@ -96,19 +115,26 @@ A. Giriş (Login) Mantığı ve Tek Aktif Oturum Rule:
    4. 15 dakikalık Access Token (gövdede) ve 7 günlük Refresh Token (HttpOnly Cookie)
       istemciye döndürülür.
 
-B. Oturum Görüntüleme ve Yönetimi:
-   1. Kullanıcı kendi adına açılmış tüm oturum geçmişini (aktif/pasif, cihaz, IP) 
-      listeleyebilir.
-   2. İsterse mevcut oturumunu kapatabilir.
+B. Profil ve Oturum Yönetimi:
+   1. `GET /api/users/me` erişim tokenıyla kullanıcının profilini döndürür.
+   2. Oturum geçmişini listeleyen ayrı bir API ucu henüz bulunmamaktadır.
+   3. `POST /api/auth/logout` aktif oturumu iptal eder ve istekteki access JTI'ını
+      blacklist'e ekler; refresh cookie yanıtla silinir.
 
-C. Access Token İptali (Blacklisting & Instantly Revoke):
+C. Access Token İptali ve Aktif Oturum Kontrolü:
    1. Access Token'lar doğası gereği 15 dakika geçerlidir. Ancak kullanıcı "Çıkış Yap" 
       dediğinde veya oturumu sonlandırıldığında token anında geçersiz kılınmalıdır.
-   2. Çıkış yapıldığında veya oturum düşürüldüğünde, ilgili oturuma bağlı ve süresi
-      dolmamış access token JTI'leri `token_blacklist` tablosuna eklenir. Bunun için
-      access token JTI'leri `session_token_jtis` tablosunda oturumla eşleştirilir.
-   3. FastAPI'nin korumalı endpoint bağımlılığında (Dependency Injection), gelen her 
-      Access Token'ın JTI değeri bu tabloda sorgulanır; eğer varsa istek REDDEDİLİR.
+   2. Girişte eski oturumlar iptal edilir ve süresi dolmamış eski access JTI'ları
+      blacklist'e eklenir. Parola sıfırlama ve refresh token tekrar kullanımında da
+      ilgili oturumlar kapatılır ve geçerli access JTI'ları blacklist'e eklenir.
+   3. Korumalı profil ucu tokenın blacklist durumunu ve JTI'ının veritabanındaki
+      kaydını kontrol eder; tokenın bağlı olduğu oturum etkin değilse isteği reddeder.
+      Böylece oturum kapanmış olsa da blacklist'e tek tek eklenmemiş eski access
+      tokenlar kullanılamaz.
+   4. Logout servisi, önce access JTI'ın blacklist'te olmadığını doğrular; ardından
+      JTI'ın veritabanındaki kaydından bağlı olduğu aktif oturumu bulup kapatır ve
+      istekteki access JTI'ı blacklist'e ekler. Böylece logout, kullanıcıya ait başka
+      bir aktif oturum yerine tokenın kendi oturumunu iptal eder.
 
 D. Refresh Token Rotation ve Tekrar Kullanım Tespiti:
    1. Her başarılı refresh isteğinde yeni bir refresh JTI üretilir; oturumun geçerli
@@ -128,17 +154,59 @@ D. Refresh Token Rotation ve Tekrar Kullanım Tespiti:
       için oturum satırı kilitlenmeli veya koşullu güncelleme kullanılmalıdır.
 
 
-5. PROJE KLASÖR YAPISI
+5. PAROLA SIFIRLAMA AKIŞI
 --------------------------------------------------------------------------------
-fastapi-jwt-auth/
+A. Sıfırlama Talebi:
+   1. Kullanıcı `/api/auth/forgot-password` uç noktasına e-posta adresini gönderir.
+      E-posta sistemde kayıtlı olsun veya olmasın aynı başarılı yanıt döndürülür;
+      böylece e-posta adresinin kayıtlı olup olmadığı yanıt üzerinden açıklanmaz.
+   2. Kullanıcı mevcutsa önceki kullanılmamış sıfırlama tokenları iptal edilir.
+   3. Kriptografik olarak rastgele bir token üretilir. Tokenın kendisi veritabanına
+      yazılmaz; SHA-256 özeti, kullanıcı ilişkisi ve yapılandırılabilir sona erme
+      zamanı (`PASSWORD_RESET_EXPIRE_MINUTES`, varsayılan 15 dakika) kaydedilir.
+   4. Ham token, `FRONTEND_BASE_URL` ayarından oluşturulan bağlantıyla e-posta
+      üzerinden gönderilir. Böylece geliştirme ve dağıtım ortamları farklı ön yüz
+      adresleri kullanabilir.
+
+B. Yeni Parolanın Belirlenmesi:
+   1. Kullanıcı bağlantıdaki tokenı ve yeni parolasını `/api/auth/reset-password`
+      uç noktasına gönderir. Token biçimi doğrulanır ve SHA-256 özeti üzerinden
+      veritabanındaki kayıt bulunur.
+   2. Bulunamayan, süresi dolmuş, iptal edilmiş veya daha önce kullanılmış token
+      reddedilir. Başarılı işlemde yeni parola Argon2 ile hashlenir ve token
+      kullanılmış olarak işaretlenir.
+   3. Parola güncellemesiyle aynı transaction içinde kullanıcının oturumları
+      iptal edilir ve henüz süresi dolmamış access token JTI'ları blacklist'e
+      eklenir. Böylece parola değişikliğinden sonra eski oturumlar kullanılamaz.
+
+
+6. PROJE KLASÖR YAPISI
+--------------------------------------------------------------------------------
+jwt-auth/
 ├── src/
-│   ├── auth/             # Auth endpointleri
-│   ├── core/             # Config, Security (Argon2/JWT), Database bağlantısı
-│   ├── db/               # SQLAlchemy ORM modelleri
-│   ├── users/            # User enpointleri    
-│   └── main.py           # Uygulama başlangıç noktası
-├── alembic/              # Veritabanı migrasyon yönetimi
-├── .env                  # Gizli değişkenler ve DB bağlantı cümlesi
-├── proje.txt             # Mimari rehber dokümanı
-└── requirements.txt      # Bağımlılıklar
+│   ├── auth/
+│   │   └── password_reset/ # Kayıt, giriş, refresh, logout ve parola sıfırlama
+│   ├── core/               # Ayarlar, JWT/parola güvenliği ve bağımlılıklar
+│   ├── database/           # Async DB bağlantısı ve SQLAlchemy modelleri
+│   ├── email/              # E-posta gönderimi
+│   ├── templates/          # E-posta şablonları
+│   ├── users/              # Kullanıcı profili
+│   └── main.py             # Uygulama başlangıç noktası
+├── alembic/                # Veritabanı migration'ları
+├── sql/                    # Elle kullanılan SQL ve deneme sorguları
+├── tests/                  # pytest testleri
+├── .gitignore              # Yerel dosyaları ve önbellekleri dışlar
+├── .env.example            # Örnek ortam ayarları
+├── alembic.ini              # Alembic yapılandırması
+├── README.md               # Kurulum ve kullanım
+├── proje.txt               # Mimari rehber dokümanı
+└── requirements.txt        # Bağımlılıklar
+
+7. MEVCUT DURUM VE GELİŞTİRME NOTLARI
+--------------------------------------------------------------------------------
+- Proje geliştirme aşamasındadır; kapsamlı auth ve parola sıfırlama testleri yazılacaktır.
+- Mevcut otomatik test, aynı e-posta ile eşzamanlı kayıt girişiminde tek kayıt
+  oluşmasını ve diğer isteğin HTTP 409 almasını doğrular.
+- Oturum geçmişi listeleme, rate limiting ve dağıtım ortamına özel CORS ayarları
+  mevcut kapsamda tamamlanmamıştır.
 ================================================================================
