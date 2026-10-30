@@ -73,6 +73,16 @@ E. session_token_jtis (Oturuma Bağlı Token Geçmişi)
    o oturuma ait henüz süresi dolmamış access token'ları bulmak için kullanılır.
 
 
+F. password_reset_tokens (şifre sıfırlama tablosu)
+   - id (UUID, PK)
+   - user_id (UUID, FK -> users.id)
+   - token_hash (String,Unique)
+   - expires_at (DateTime)
+   - used_at (DateTime)
+   - revoked_at (DateTime)
+   - created_at (DateTime)
+   
+
 4. MANTIKSAL ÇALIŞMA ALGORİTMALARI
 --------------------------------------------------------------------------------
 A. Giriş (Login) Mantığı ve Tek Aktif Oturum Rule:
