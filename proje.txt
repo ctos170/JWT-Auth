@@ -89,18 +89,11 @@ F. password_reset_tokens (şifre sıfırlama tablosu)
    - user_id (UUID, FK -> users.id)
    - token_hash (String,Unique)
    - expires_at (DateTime)
-<<<<<<< HEAD
-   - used_at (DateTime)
-   - revoked_at (DateTime)
-   - created_at (DateTime)
-   
-=======
    - used_at (DateTime, Nullable)
    - revoked_at (DateTime, Nullable)
    - created_at (DateTime)
 
 
->>>>>>> 35e1267 (proje.txt dosyası projenin güncel yapısına göre tekrar düzenlendi.)
 
 4. MANTIKSAL ÇALIŞMA ALGORİTMALARI
 --------------------------------------------------------------------------------
