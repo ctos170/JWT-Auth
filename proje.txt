@@ -1,0 +1,134 @@
+================================================================================
+PROJE ADI: Advanced FastAPI JWT & Active Session Management Architecture
+================================================================================
+
+1. PROJENİN AMACI VE KAPSAMI
+--------------------------------------------------------------------------------
+Bu projenin temel amacı, standart (stateless) JWT authentication mekanizmasını 
+ileri seviye bir oturum yönetimi (stateful session tracking) ve güvenlik katmanı 
+ile birleştirerek üretim seviyesinde (production-ready) bir backend mimarisi 
+oluşturmaktır.
+
+Sistem, geleneksel "token üret, çereze at" yaklaşımının ötesine geçerek:
+  - HTTPBearer standartlarına uyumlu Access Token yönetimi,
+  - Veritabanı destekli dinamik oturum (Session) takibi,
+  - Çoklu cihaz geçmişi tutulurken "Tek Aktif Oturum" zorunluluğu,
+  - Süresi dolmamış 15 dakikalık Access Token'lar için anlık iptal (Blacklist) mekanizması,
+sunacak şekilde tasarlanmıştır. Bu proje, gelecekteki tüm FastAPI projeleri için 
+bir mimari rehber ve referans kodu işlevi görecektir.
+
+
+2. MİMARİ VE TEKNİK ÖZELLİKLER
+--------------------------------------------------------------------------------
+* Framework: FastAPI (Asenkron mimari)
+* Database & ORM: PostgreSQL + Async SQLAlchemy + asyncpg driver
+* Migration Engine: Alembic (Async mod)
+* Password Hashing: Argon2 (argon2-cffi)
+* Token Type: JWT PyJwt - HTTPBearer Bearer Flow
+* Token Lifetime: 
+    - Access Token: 15 Dakika (JSON Response / HTTPBearer Standard)
+    - Refresh Token: 7 Gün (HttpOnly, Secure Cookie)
+
+
+3. VERİTABANI ŞEMASI VE TABLO YAPILARI
+--------------------------------------------------------------------------------
+Sistem yerel PostgreSQL üzerinde aşağıdaki tablolarla çalışacaktır:
+
+A. users (Ana Kullanıcı Tablosu)
+   - id (UUID, PK)
+   - is_active (Boolean)
+   - created_at / updated_at (DateTime)
+
+B. user_credentials (Kimlik Bilgileri - 1:1 İlişki)
+   - user_id (UUID, FK -> users.id, PK)
+   - email (String, Unique, Index)
+   - phone_number (String, Optional)
+   - password_hash (String - Argon2)
+
+C. user_sessions (Oturum Yönetimi - 1:N İlişki)
+   - id (UUID, PK)
+   - user_id (UUID, FK -> users.id)
+   - refresh_token_jti (String, Unique, Index)
+   - device_info (String - User-Agent bilgisi)
+   - ip_address (String)
+   - is_revoked (Boolean - Oturum kapatıldı mı?)
+   - expires_at (DateTime)
+   - created_at / updated_at (DateTime)
+
+D. token_blacklist (Access Token İptal Tablosu)
+   - jti (String, PK - Access Token UUID/JTI)
+   - revoked_at (DateTime)
+   - expires_at (DateTime)
+
+E. session_token_jtis (Oturuma Bağlı Token Geçmişi)
+   - jti (String, PK - Access veya Refresh Token JTI)
+   - session_id (UUID, FK -> user_sessions.id)
+   - token_type (String - access / refresh)
+   - expires_at (DateTime)
+   - used_at (DateTime, Nullable - refresh token başarıyla kullanıldıysa)
+   - revoked_at (DateTime, Nullable - token iptal edildiyse)
+
+   Bu tablo her oturum için üretilen token JTI'lerini ve hangi oturuma ait olduklarını
+   saklar. Refresh token tekrar kullanımını saptamak ve bir oturum iptal edildiğinde
+   o oturuma ait henüz süresi dolmamış access token'ları bulmak için kullanılır.
+
+
+4. MANTIKSAL ÇALIŞMA ALGORİTMALARI
+--------------------------------------------------------------------------------
+A. Giriş (Login) Mantığı ve Tek Aktif Oturum Rule:
+   1. Kullanıcı email ve şifre ile istek atar, Argon2 ile doğrulanır.
+   2. Sistem, veritabanında kullanıcının var olan TÜM aktif oturumlarını
+      iptal eder (`is_revoked = True`) ve bu oturumlara bağlı süresi dolmamış
+      access token JTI'lerini blacklist'e ekler. Böylece eski access token'lar
+      da 15 dakika beklenmeden geçersiz olur.
+   3. Yeni bir `UserSession` kaydı oluşturulur. Hem access hem refresh token JTI'si
+      `session_token_jtis` tablosuna bu oturumla ilişkilendirilerek kaydedilir.
+   4. 15 dakikalık Access Token (gövdede) ve 7 günlük Refresh Token (HttpOnly Cookie)
+      istemciye döndürülür.
+
+B. Oturum Görüntüleme ve Yönetimi:
+   1. Kullanıcı kendi adına açılmış tüm oturum geçmişini (aktif/pasif, cihaz, IP) 
+      listeleyebilir.
+   2. İsterse mevcut oturumunu kapatabilir.
+
+C. Access Token İptali (Blacklisting & Instantly Revoke):
+   1. Access Token'lar doğası gereği 15 dakika geçerlidir. Ancak kullanıcı "Çıkış Yap" 
+      dediğinde veya oturumu sonlandırıldığında token anında geçersiz kılınmalıdır.
+   2. Çıkış yapıldığında veya oturum düşürüldüğünde, ilgili oturuma bağlı ve süresi
+      dolmamış access token JTI'leri `token_blacklist` tablosuna eklenir. Bunun için
+      access token JTI'leri `session_token_jtis` tablosunda oturumla eşleştirilir.
+   3. FastAPI'nin korumalı endpoint bağımlılığında (Dependency Injection), gelen her 
+      Access Token'ın JTI değeri bu tabloda sorgulanır; eğer varsa istek REDDEDİLİR.
+
+D. Refresh Token Rotation ve Tekrar Kullanım Tespiti:
+   1. Her başarılı refresh isteğinde yeni bir refresh JTI üretilir; oturumun geçerli
+      refresh JTI'si yenisiyle değiştirilir. Kullanılan eski JTI geçmiş kayıtta
+      tutulur ve `used_at` zamanı yazılır.
+   2. Eski refresh JTI'yi yeniden sunan istek, imza/tür/süre doğrulamasını geçtikten
+      sonra `session_token_jtis` geçmişinde bulunur. Bu JTI'nin bağlı olduğu oturum
+      revoke edilir; o oturuma bağlı geçerli access token'lar da blacklist'e eklenir.
+      İstek reddedilir ve istemci yeniden giriş yapmalıdır.
+   3. Geçmiş JTI -> oturum eşlemesi veritabanında tutulmalıdır; JWT payload'ı tek
+      başına token'ın daha önce kullanılıp kullanılmadığını gösteremez. `used_at`
+      durumu aynı JTI'nin tekrar kullanımını anlamayı sağlar. Eski token geçmişini
+      yalnızca `user_sessions.refresh_token_jti` alanında tutmak yeterli değildir,
+      çünkü bu alan rotation sırasında eski JTI'nin üzerine yazılır.
+   4. Refresh sırasında yeni JTI'ye geçiş ve eski JTI'nin kullanıldı olarak
+      işaretlenmesi tek transaction içinde yapılmalıdır. Eşzamanlı refresh istekleri
+      için oturum satırı kilitlenmeli veya koşullu güncelleme kullanılmalıdır.
+
+
+5. PROJE KLASÖR YAPISI
+--------------------------------------------------------------------------------
+fastapi-jwt-auth/
+├── src/
+│   ├── auth/             # Auth endpointleri
+│   ├── core/             # Config, Security (Argon2/JWT), Database bağlantısı
+│   ├── db/               # SQLAlchemy ORM modelleri
+│   ├── users/            # User enpointleri    
+│   └── main.py           # Uygulama başlangıç noktası
+├── alembic/              # Veritabanı migrasyon yönetimi
+├── .env                  # Gizli değişkenler ve DB bağlantı cümlesi
+├── proje.txt             # Mimari rehber dokümanı
+└── requirements.txt      # Bağımlılıklar
+================================================================================
