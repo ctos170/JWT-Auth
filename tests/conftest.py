@@ -5,6 +5,9 @@ import pytest
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from src.database.db import get_db
+from src.main import app
+from httpx import ASGITransport, AsyncClient
+from fastapi import Depends
 
 
 # Load the project .env so the test suite can read TEST_DATABASE_URL.
@@ -37,3 +40,22 @@ async def test_session_factory(anyio_backend):
         yield session_factory
     finally:
         await engine.dispose()
+
+
+@pytest.fixture
+async def client(test_session_factory):
+
+    async def override_get_db():
+        async with test_session_factory() as session:
+            yield session
+            
+    app.dependency_overrides[get_db] = override_get_db        
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app),
+            base_url="http://127.0.0.1:8000/api"
+        ) as client :
+            yield client
+    finally:
+        app.dependency_overrides.clear()
