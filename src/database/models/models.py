@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship,DeclarativeBase
-from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, UUID
+from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, UUID,CheckConstraint
 from datetime import datetime, timezone
 from typing import Optional, List
 
@@ -10,6 +10,13 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "age >= 18 AND age < 80",
+            name="check_user_age"
+        ),
+        )
+
     id : Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
     name : Mapped[str] = mapped_column(String(150))
     surname : Mapped[str] = mapped_column(String(175))
@@ -41,7 +48,7 @@ class User_Credential(Base):
         unique=True
     )
     email: Mapped[str] = mapped_column(String(150), unique=True, index=True)
-    phone_number : Mapped[Optional[str]] = mapped_column(String(200),unique=True)
+    phone_number : Mapped[Optional[str]] = mapped_column(String(200),unique=True,index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
 
     user : Mapped["User"] = relationship(back_populates="credential") 
