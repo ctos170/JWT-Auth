@@ -117,3 +117,29 @@ async def test_previously_registered_email(client:AsyncClient,test_session_facto
 
     
     
+async def test_invalid_data_registration(client:AsyncClient):   
+    async def register(**invalid_form_data):
+        return await client.post("/auth/register",json=invalid_form_data)  
+
+    # * Eksi veri isteği    
+    missing_data_response = await register(
+        name="Arda",
+        age=21
+    ) 
+
+    assert missing_data_response.status_code == 422
+    print(f"Eksik veri isteğinin cevabı : {missing_data_response.json()} | status code : {missing_data_response.status_code}")       
+
+    
+    # * Geçersiz ver isteği
+    invalid_data_response = await register(
+        name="A",
+        age="",
+        surname="k",
+        email="abc@gmail",
+        password="1basdşasdmşlmqşelqweöşlasdsad"
+    ) 
+
+    assert invalid_data_response.status_code == 422
+    print(f"Geçersiz veri isteğinin cevabı : {invalid_data_response.json()} | status code : {invalid_data_response.status_code}")       
+
