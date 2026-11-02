@@ -174,8 +174,7 @@ async def get_revoke_sessions_ids(session:AsyncSession,user_id:UUID):
 
 async def get_access_token_by_jti(jti:str,session:AsyncSession):
     "Blacklist tablosundan jtiye göre access token bulma" 
-    stmt = select(Token_Blacklist).where(Token_Blacklist.jti == jti)
-
+    stmt = select(Token_Blacklist).where(Token_Blacklist.jti == jti)  
     result = await session.scalars(stmt)
 
     return result.one_or_none()

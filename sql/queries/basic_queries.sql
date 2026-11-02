@@ -24,3 +24,4 @@ SELECT * FROM token_blacklist;
 
 -- SELECT token_blacklist.jti FROM token_blacklist WHERE token_blacklist.jti IN ('b9f3a835-03b7-482e-9655-453f5e318b5c');  
 
+-- SELECT count(name) FROM  users;

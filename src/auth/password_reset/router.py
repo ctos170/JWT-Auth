@@ -22,7 +22,6 @@ async def password_reset_request(
     result = await service.password_reset_request(email,background_tasks,session)
 
     return JSONResponse(
-        status_code=status.HTTP_200_OK,
         content=result
     )    
 
@@ -33,7 +32,6 @@ async def reset_user_password(form_data:Reset_Password_Request,session:AsyncSess
       result = await service.reset_user_password(form_data,session)       
 
       return JSONResponse(
-           status_code=status.HTTP_200_OK,
            content=result
       )      
 

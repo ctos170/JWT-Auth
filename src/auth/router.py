@@ -20,7 +20,7 @@ async def register(form_data:Register_Request,session:AsyncSession=Depends(get_d
    
    result = await register_user(form_data,session)
 
-   return JSONResponse(status_code=status.HTTP_201_CREATED,content=result)
+   return JSONResponse(content=result)
 
 
 @router.post("/login",status_code=status.HTTP_200_OK,summary="Giriş")
@@ -34,10 +34,10 @@ async def login(form_data:Login_Request,req:Request,session:AsyncSession=Depends
    access_token = result["access_token"]
 
    response = JSONResponse(
-      status_code=status.HTTP_200_OK,
       content={
          "message":"Giriş başarılı.",
-         "access_token":access_token
+         "access_token":access_token,
+         "token_type": "bearer"
       }
    )
 
@@ -69,10 +69,10 @@ async def refresh(
    access_token = result["access_token"]
 
    response = JSONResponse(
-         status_code=status.HTTP_200_OK,
          content={
             "message":"Tokenlar başarıyla yenilendi.",
-            "access_token":access_token
+            "access_token":access_token,
+            "token_type": "bearer"
          }
       )
    
@@ -99,7 +99,6 @@ async def logout(
    result = await user_logout(session,payload)
 
    response = JSONResponse(
-      status_code=status.HTTP_200_OK,
       content=result
    )
 

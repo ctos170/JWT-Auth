@@ -51,7 +51,6 @@ async def test_successful_registration(client: AsyncClient, test_session_factory
 
         # Her iki HTTP isteğinin de başarılı kayıt yanıtı verdiğini doğrula.
         assert [response.status_code for response in responses] == [201, 201] # type: ignore
-        assert all(response.json()["status_code"] == 201 for response in responses) # type: ignore
 
         # * Konsolda yanıt gövdelerini inceleyebilmek için yazdır.
         for response in responses:

@@ -1,7 +1,7 @@
 from pydantic import BaseModel,Field,EmailStr,field_validator
 from typing import Optional
 from src.utils.password_validator import  validate_password_complexity
-
+from pydantic_extra_types.phone_numbers import PhoneNumber 
 
 
 NO_WHITESPACE_REGEX = r"^\S+$" 
@@ -12,7 +12,7 @@ class Register_Request(BaseModel):
     surname : str = Field(...,min_length=2,examples=["Kaymak"])
     age : int = Field(...,ge=18,examples=[21])
     email : EmailStr = Field(...,examples=["abc@gmail.com"])
-    phone_number : Optional[str] = None
+    phone_number : Optional[PhoneNumber] = None
     password : str = Field(...,min_length=8,examples=["P@ssw0rd!"])
 
    
