@@ -1,11 +1,14 @@
 import asyncio
-from uuid import uuid4
-
+from uuid import uuid4 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import delete, func, select
+from sqlalchemy import exc
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.models import User, User_Credential
+from src.auth import service
+from typing import Any
 
 
 pytestmark = pytest.mark.anyio
@@ -13,6 +16,7 @@ pytestmark = pytest.mark.anyio
 
 
 async def test_successful_registration(client: AsyncClient, test_session_factory):
+    "Başarılı kayıt testi."
     # İki istekte de farklı e-posta kullanarak ikisinin başarılı olmasını bekliyoruz.
     first_requests_email = f"testuser-{uuid4().hex}@example.com"
     second_requests_email = f"testuser-{uuid4().hex}@example.com"
@@ -117,7 +121,8 @@ async def test_previously_registered_email(client:AsyncClient,test_session_facto
 
     
     
-async def test_invalid_data_registration(client:AsyncClient):   
+async def test_invalid_data_registration(client:AsyncClient): 
+    "Geçersiz ve eksik veri ile kayıt testi"  
     async def register(**invalid_form_data):
         return await client.post("/auth/register",json=invalid_form_data)  
 
@@ -131,7 +136,7 @@ async def test_invalid_data_registration(client:AsyncClient):
     print(f"Eksik veri isteğinin cevabı : {missing_data_response.json()} | status code : {missing_data_response.status_code}")       
 
     
-    # * Geçersiz ver isteği
+    # * Geçersiz veri isteği
     invalid_data_response = await register(
         name="A",
         age="",
@@ -143,3 +148,40 @@ async def test_invalid_data_registration(client:AsyncClient):
     assert invalid_data_response.status_code == 422
     print(f"Geçersiz veri isteğinin cevabı : {invalid_data_response.json()} | status code : {invalid_data_response.status_code}")       
 
+
+
+async def test_error_mapping(client:AsyncClient,monkeypatch):
+    "DB hatalarının doğru http yanıtıne çevirildiğinin testi"    
+    email = f"testuser-{uuid4().hex}@example.com"
+    form_data = {
+        "name": "TestUser",
+        "surname": "TestUserSurname",
+        "email": email,
+        "age": 21,
+        "password": "P@ssw0rd!",
+    } 
+
+
+    async def fake_func(user_dict, credential_dict, session):
+        # Servis yazma aşamasında DB bağlantı hatası olmuş gibi davran.
+        raise exc.OperationalError(
+            "",
+            {},
+            RuntimeError("Test için oluşturulan db hatası")
+            )
+        
+    
+    monkeypatch.setattr(
+        service,
+        "create_user",
+        fake_func
+    )
+
+    response = await client.post("/auth/register",json=form_data)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Veritabanı sunucusuna şu an ulaşılamıyor. "
+        "Lütfen daha sonra tekrar deneyin."
+    )
+    
