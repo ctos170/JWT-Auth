@@ -1,4 +1,4 @@
-from fastapi import APIRouter,Depends,status,Body,BackgroundTasks,Query
+from fastapi import APIRouter,Depends,status,Body,BackgroundTasks,Query,Request
 from src.database.db import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
@@ -7,13 +7,16 @@ from typing import Any
 from pydantic import EmailStr
 from src.auth.password_reset import service
 from .schemas import Reset_Password_Request
+from src.main import limiter
 
 
 router = APIRouter()
 
 
 @router.post("/forgot-password",status_code=status.HTTP_200_OK,summary="Şifre sıfırlama talebi")
+@limiter.limit("3/hour")
 async def password_reset_request(
+    request: Request,
     background_tasks:BackgroundTasks,
     email:EmailStr=Body(embed=True,examples=["abc@gmail.com"]),
     session:AsyncSession = Depends(get_db)
@@ -27,7 +30,8 @@ async def password_reset_request(
 
 
 @router.post("/reset-password",status_code=status.HTTP_200_OK,summary="Şifre sıfırlama.Yenisini belirleme.")
-async def reset_user_password(form_data:Reset_Password_Request,session:AsyncSession=Depends(get_db)):
+@limiter.limit("10/minute")
+async def reset_user_password(request: Request,form_data:Reset_Password_Request,session:AsyncSession=Depends(get_db)):
 
       result = await service.reset_user_password(form_data,session)       
 
