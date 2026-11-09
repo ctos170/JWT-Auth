@@ -37,24 +37,19 @@ async def get_user_by_email_or_phone_number(session:AsyncSession,email:str,phone
 
 async def create_user(user_dict:dict[str,Any],credential_dict:dict[str,Any],session:AsyncSession):
 
-    try:
-        user = User(**user_dict)
+    user = User(**user_dict)
 
-        session.add(user)
+    session.add(user)
 
-        await session.flush()
+    await session.flush()
 
-        credential_dict["user_id"] = user.id
+    credential_dict["user_id"] = user.id
 
-        credential = User_Credential(**credential_dict)
+    credential = User_Credential(**credential_dict)
 
-        session.add(credential)
+    session.add(credential)
 
-        await session.commit()
-
-    except IntegrityError:
-        await session.rollback()
-        raise
+    return user
 
 
 async def revoke_sessions(session:AsyncSession,user_id:UUID):

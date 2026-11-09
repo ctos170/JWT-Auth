@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import status,Request
-from src.database.models.models import User,Session_Token_Jtis,Token_Blacklist
+from fastapi import status,Request,BackgroundTasks
+from src.database.models.models import User,Session_Token_Jtis,Token_Blacklist,Email_Verification_Token
 from fastapi.exceptions import HTTPException
 from src.core.decorators import handle_service_errors
 from .schemas import Register_Request,Login_Request
@@ -22,25 +22,33 @@ from src.core.security import hash_password,verify_password,create_access_token,
 from datetime import datetime,timezone,timedelta
 from src.core.config import settings
 from typing import Any
+from .email_verification.repository import revoke_user_email_verification_tokens
+from secrets import token_urlsafe
+from hashlib import sha256
+from src.email.service import send_email
 
 
 
 @handle_service_errors
-async def register_user(form_data:Register_Request,session:AsyncSession):
-  
-    user = await get_user_by_email_or_phone_number(
+async def register_user(
+    form_data:Register_Request,
+    session:AsyncSession,
+    background_tasks:BackgroundTasks,
+    ):
+
+    async with session.begin():
+      user = await get_user_by_email_or_phone_number(
         session,
         form_data.email,
         phone_number=form_data.phone_number
     )
 
-    if user :
+      if user :
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bu e-posta adresi zaten kullanımda."
         )
 
- 
     hashed_password = hash_password(form_data.password)
 
     user_dict = form_data.model_dump(include={"name","surname","age"})
@@ -49,9 +57,40 @@ async def register_user(form_data:Register_Request,session:AsyncSession):
 
     credential_dict["password_hash"] = hashed_password   
 
-    await create_user(user_dict,credential_dict,session)
+    async with session.begin():
+       # * Kullanıcı kayıt oldu.Eposta doğrulama bağlantısı hazırlanıyor.
+       user = await create_user(user_dict,credential_dict,session)
+       user_id = user.id
+       # * Geçerli olanların iptali 
+       await revoke_user_email_verification_tokens(session,user_id)
 
-    return {"message":"Kayıt başarlı.Giriş yapabilirsiniz."}
+       now = datetime.now(timezone.utc)
+       
+       verification_token = token_urlsafe(32)
+       hashed_verification_token = sha256(verification_token.encode("utf-8")).hexdigest()
+
+       session.add(
+           Email_Verification_Token(
+               user_id=user_id,
+               verification_token_hash=hashed_verification_token,
+               expires_at=now + timedelta(minutes=settings.EMAIL_VERIFICATION_EXPIRE_MINUTES)
+           )
+        )
+
+    frontend_base_url = settings.FRONTEND_BASE_URL.rstrip("/")
+    verification_link = f"{frontend_base_url}/auth/verify-email?token={verification_token}"
+    background_tasks.add_task(
+        send_email,
+        subject="Eposta Doğrulama Talebi",
+        email_to=[form_data.email],
+        template_name="email_verification.html",
+        template_body={"email":form_data.email,"link":verification_link}
+    )   
+
+    return {
+        "message": "Kayıt başarılı.",
+        "detail": "Hesabınızı etkinleştirmek için e-posta adresinize gönderdiğimiz doğrulama bağlantısını kullanın."
+    }
 
 
 @handle_service_errors

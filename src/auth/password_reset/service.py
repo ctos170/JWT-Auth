@@ -39,7 +39,6 @@ async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks
        
        await revoke_user_reset_token(user.user_id,session)
        
-        
        now = datetime.now(timezone.utc)
 
        reset_token = token_urlsafe(32)
@@ -53,17 +52,16 @@ async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks
            )
        )       
        
-        
-       frontend_base_url = settings.FRONTEND_BASE_URL.rstrip("/")
-       reset_link = f"{frontend_base_url}/auth/reset-password?token={reset_token}"
+    frontend_base_url = settings.FRONTEND_BASE_URL.rstrip("/")
+    reset_link = f"{frontend_base_url}/auth/reset-password?token={reset_token}"
        
-       background_tasks.add_task(
-           send_email,
-           subject="Şifre sıfırlama talebi",
-           email_to=[email],
-           template_name="password_reset_request.html",
-           template_body={"email":email,"link":reset_link}
-       )
+    background_tasks.add_task(
+        send_email,
+        subject="Şifre sıfırlama talebi",
+        email_to=[email],
+        template_name="password_reset_request.html",
+        template_body={"email":email,"link":reset_link}
+    )
 
     return response   
 

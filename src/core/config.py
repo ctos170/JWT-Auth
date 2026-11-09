@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     REFRESH_COOKIE_SAMESITE: Literal['lax', 'strict', 'none'] = "lax"
     REFRESH_COOKIE_DOMAIN: str | None = None
     PASSWORD_RESET_EXPIRE_MINUTES : int = 15
+    EMAIL_VERIFICATION_EXPIRE_MINUTES: int =15
+
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

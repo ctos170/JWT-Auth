@@ -10,8 +10,8 @@ NO_WHITESPACE_REGEX = r"^\S+$"
 class Register_Request(BaseModel):
     name : str = Field(...,min_length=2,examples=["Arda"])
     surname : str = Field(...,min_length=2,examples=["Kaymak"])
-    age : int = Field(...,ge=18,examples=[21])
-    email : EmailStr = Field(...,examples=["abc@gmail.com"])
+    age : int = Field(...,ge=18,lt=80,examples=[21])
+    email : EmailStr = Field(...,examples=["abc@gmail.com"],max_length=150)
     phone_number : Optional[PhoneNumber] = None
     password : str = Field(...,min_length=8,examples=["P@ssw0rd!"])
 

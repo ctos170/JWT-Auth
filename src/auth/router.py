@@ -1,4 +1,4 @@
-from fastapi import APIRouter,Depends,status,Request
+from fastapi import APIRouter,Depends,status,Request,BackgroundTasks
 from src.database.db import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
@@ -9,23 +9,26 @@ from src.core.dependencies import verify_refresh_token,get_access_payload
 from typing import Any
 from src.database.models.models import User
 from .password_reset.router import router as password_reset_router
+from .email_verification.router import router as email_verification_router
 from src.main import limiter
 
 
 router = APIRouter()
 
 router.include_router(password_reset_router)
+router.include_router(email_verification_router)
 
 
 @router.post("/register",status_code=status.HTTP_201_CREATED,summary="Kullanıcı kayıt")
 @limiter.limit("5/minute")
 async def register(
    request: Request,
+   background_tasks:BackgroundTasks,
    form_data:Register_Request,
    session:AsyncSession=Depends(get_db)
    ):
    
-   result = await register_user(form_data,session)
+   result = await register_user(form_data,session,background_tasks)
 
    return JSONResponse(content=result)
 

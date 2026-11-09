@@ -1,6 +1,8 @@
 from pydantic import BaseModel,EmailStr
 from typing import Optional
 from datetime import datetime
+from pydantic_extra_types.phone_numbers import PhoneNumber 
+
 
 
 class User_Profile_Response(BaseModel):
@@ -13,7 +15,7 @@ class User_Profile_Response(BaseModel):
 
 class Credential(BaseModel):
     email:EmailStr
-    phone_number : Optional[str] = None
+    phone_number : Optional[PhoneNumber] = None
 
 
 class User_Sessions_Response(BaseModel):
