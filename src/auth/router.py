@@ -16,7 +16,7 @@ from src.main import limiter
 router = APIRouter()
 
 router.include_router(password_reset_router)
-router.include_router(email_verification_router)
+router.include_router(email_verification_router,prefix="/email-verification")
 
 
 @router.post("/register",status_code=status.HTTP_201_CREATED,summary="Kullanıcı kayıt")

@@ -5,17 +5,29 @@ from fastapi.responses import JSONResponse
 from typing import Any
 from src.main import limiter
 from pydantic import EmailStr
-
+from .service import resend_email_verification_token
 
 router = APIRouter()
 
 
-@router.post("/resend-email-verification",status_code=status.HTTP_200_OK,summary="Eposta doğrulama bağlantısını yeniden gönderme")
+@router.post("/resend",status_code=status.HTTP_200_OK,summary="Eposta doğrulama bağlantısını yeniden gönderme")
 @limiter.limit("3/hour")
-async def resend_email_verification_token(
+async def resend(
     request:Request,
     background_tasks:BackgroundTasks,
     email:EmailStr=Body(embed=True),
     session:AsyncSession=Depends(get_db)
     ):
-    pass
+    return await resend_email_verification_token(email,background_tasks,session)
+
+
+
+
+
+
+
+
+
+
+
+
