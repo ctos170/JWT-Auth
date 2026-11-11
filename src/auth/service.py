@@ -106,7 +106,7 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hatalı eposta veya şifre"
        )
-       
+
        user_id = user.user_id
        password_hash = user.password_hash
     
@@ -119,7 +119,18 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hatalı eposta veya şifre"
     )
-    
+
+    if user.user.email_verified is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "Giriş yapabilmek için e-posta adresinizi doğrulamanız gerekiyor.",
+                "action": "resend_email_verification",
+                "action_label": "Doğrulama e-postasını yeniden gönder",
+            } 
+        )
+
+           
     # * Writing Phase
     async with session.begin():
         # * Başarılı login'in tüm DB değişiklikleri aynı transaction içinde yapılır.

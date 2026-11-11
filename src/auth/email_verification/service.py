@@ -9,7 +9,8 @@ from src.core.config import settings
 from src.database.models.models import Email_Verification_Token
 from src.email.service import send_email
 from ..repository import get_user_by_email_or_phone_number
-from .repository import revoke_user_email_verification_tokens,get_active_email_verificaion_token
+from .repository import revoke_user_email_verification_tokens,get_active_email_verificaion_token,get_email_verification_token_row
+from .schemas import Email_Verification_Request
 
 
 
@@ -68,10 +69,40 @@ async def resend_email_verification_token(
       return response
 
 
+@handle_service_errors
+async def verify_user_email(
+    token:str,
+    session:AsyncSession
+    ):
+    now = datetime.now(timezone.utc)
+
+    hashed_token = sha256(token.encode("utf-8")).hexdigest()
+    
+    async with session.begin():
+        token_row = await get_email_verification_token_row(hashed_token,session)
+
+        if token_row is None or token_row.used_at or token_row.revoked_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Geçersiz eposta doğrulama tokenı.",
+            ) 
+    
+        if token_row.expires_at < now :
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Eposta doğrulama bağlantısının süresi geçmiş."
+        ) 
 
 
+        user = token_row.user
 
+        if user.email_verified:
+            return {"message":"Bu eposta adresi zaten doğrulamış."}
 
+        user.email_verified = True
+        token_row.used_at = now
+
+    return {"message":"Eposta adresi başarıyla doğrulandı.Giriş yapabilirsiniz."}
 
 
 
