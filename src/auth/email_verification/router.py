@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.post("/resend",status_code=status.HTTP_200_OK,summary="Eposta doğrulama bağlantısını yeniden gönderme")
-# @limiter.limit("3/hour")
+@limiter.limit("3/hour")
 async def resend(
     request:Request,
     background_tasks:BackgroundTasks,

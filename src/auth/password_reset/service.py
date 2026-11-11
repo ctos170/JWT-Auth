@@ -16,7 +16,7 @@ from src.auth.repository import (
     get_jti_from_blacklist,
     add_blacklist
 )
-from .repository import revoke_user_reset_token,get_password_reset_token
+from .repository import revoke_user_reset_token,get_password_reset_token,get_active_password_reset_token
 from src.database.models.models import Password_Reset_Token
 from src.email.service import send_email
 from .schemas import Reset_Password_Request
@@ -28,6 +28,8 @@ from src.core.security import hash_password
 async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks,session:AsyncSession):
 
     async with session.begin():
+       now = datetime.now(timezone.utc)
+       
        response = {
             "message":"Eposta adresiniz sistemimizde kayıtlı ise şifre sıfırlama bağlanısı gönredilecektir."
         }
@@ -36,6 +38,16 @@ async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks
     
        if not user:
             return response
+
+       active_token_row = await get_active_password_reset_token(user.user_id,session)
+
+       if active_token_row:
+            passed_time = now - active_token_row.created_at
+            timeout = timedelta(minutes=2)
+
+            if passed_time < timeout:
+                return response
+           
        
        await revoke_user_reset_token(user.user_id,session)
        

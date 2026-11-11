@@ -24,6 +24,20 @@ async def revoke_user_reset_token(user_id:UUID,session:AsyncSession):
     await session.execute(stmt)
 
 
+async def get_active_password_reset_token(user_id:UUID,session:AsyncSession):
+    now = datetime.now(timezone.utc)
+    
+    return await session.scalar(
+        select(Password_Reset_Token)
+        .where(
+            Password_Reset_Token.user_id == user_id,
+            Password_Reset_Token.used_at.is_(None),
+            Password_Reset_Token.revoked_at.is_(None),
+            Password_Reset_Token.expires_at > now
+        )
+    )
+
+
 async def get_password_reset_token(token_hash:str,session:AsyncSession):
     stmt = (
         select(Password_Reset_Token).

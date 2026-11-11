@@ -30,7 +30,7 @@ async def password_reset_request(
 
 
 @router.post("/reset-password",status_code=status.HTTP_200_OK,summary="Şifre sıfırlama.Yenisini belirleme.")
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 async def reset_user_password(request: Request,form_data:Reset_Password_Request,session:AsyncSession=Depends(get_db)):
 
       result = await service.reset_user_password(form_data,session)       
