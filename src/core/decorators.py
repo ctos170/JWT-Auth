@@ -52,7 +52,8 @@ def handle_service_errors(func: Callable):
             # PostgreSQL sürücü hatası SQLAlchemy tarafından sarılmış olabilir.
             # Kısıt adını istisna zincirinin tamamında ara.
             constraint_name = _get_constraint_name(e)
-            if constraint_name == "ix_user_credentials_email":
+           
+            if constraint_name == "user_credentials_email_key":
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Bu e-posta adresi zaten kullanımda.",

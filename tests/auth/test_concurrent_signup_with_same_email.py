@@ -2,7 +2,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy import delete, func, select
 
 from src.auth import service as auth_service
@@ -63,7 +63,11 @@ async def test_concurrent_signups_with_same_email_return_specific_conflict(
         # Her eşzamanlı servis çağrısı kendine ait bir DB session kullanır.
         async with test_session_factory() as db:
             form_data = Register_Request(**form_values)
-            return await auth_service.register_user(form_data, db)
+            return await auth_service.register_user(
+                form_data,
+                db,
+                BackgroundTasks(),
+            )
 
     try:
         # Aynı e-posta için iki kayıt denemesini eşzamanlı çalıştır.
