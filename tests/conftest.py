@@ -54,7 +54,7 @@ async def client(test_session_factory):
     try:
         async with AsyncClient(
             transport=ASGITransport(app),
-            base_url="http://127.0.0.1:8000/api"
+            base_url="http://127.0.0.1:8000"
         ) as client :
             yield client
     finally:

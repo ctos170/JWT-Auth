@@ -40,7 +40,7 @@ async def test_successful_registration(client: AsyncClient, test_session_factory
 
     async def register_request(form_data):
         # Her çağrı ayrı bir HTTP kayıt isteği gönderir.
-        return await client.post("/auth/register", json=form_data)
+        return await client.post("/api/auth/register", json=form_data)
 
     try:
         # İki kayıt isteğini aynı anda gönder ve yanıtlarını aynı sırada al.
@@ -91,7 +91,7 @@ async def test_previously_registered_email(client:AsyncClient,test_session_facto
         } 
 
     async def register():       
-       return await client.post("/auth/register",json=form_data)
+       return await client.post("/api/auth/register",json=form_data)
 
     try:
       successful_response = await register()
@@ -124,7 +124,7 @@ async def test_previously_registered_email(client:AsyncClient,test_session_facto
 async def test_invalid_data_registration(client:AsyncClient): 
     "Geçersiz ve eksik veri ile kayıt testi"  
     async def register(**invalid_form_data):
-        return await client.post("/auth/register",json=invalid_form_data)  
+        return await client.post("/api/auth/register",json=invalid_form_data)  
 
     # * Eksi veri isteği    
     missing_data_response = await register(
@@ -177,7 +177,7 @@ async def test_error_mapping(client:AsyncClient,monkeypatch):
         fake_func
     )
 
-    response = await client.post("/auth/register",json=form_data)
+    response = await client.post("/api/auth/register",json=form_data)
 
     assert response.status_code == 503
     assert response.json()["detail"] == (
