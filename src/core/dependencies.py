@@ -1,4 +1,4 @@
-from src.users.repository import get_user_by_id
+from src.users.repository import get_user_with_credential_by_id
 from src.auth.repository import get_access_token_by_jti, get_active_access_token_jti
 from typing import Annotated
 from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
@@ -49,8 +49,12 @@ async def get_current_user(
             detail="Oturumunuz etkin değil. Lütfen tekrar giriş yapın.",
         )
 
-    user = await get_user_by_id(user_id,session)
-
+    user = await get_user_with_credential_by_id(user_id,session)
+    if user.is_active is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hesabınız şu anda devre dışı bırakılmış durumda."
+        ) 
     return user
 
 

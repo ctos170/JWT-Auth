@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import status,Request,BackgroundTasks
-from src.database.models.models import User,Session_Token_Jtis,Token_Blacklist,Email_Verification_Token
+from src.database.models.models import Session_Token_Jtis,Token_Blacklist,Email_Verification_Token
 from fastapi.exceptions import HTTPException
 from src.core.decorators import handle_service_errors
 from .schemas import Register_Request,Login_Request
@@ -16,7 +16,8 @@ from .repository import (
    get_jti_from_blacklist,
    get_refresh_jti,
    get_access_token_by_jti,
-   get_active_access_token_jti
+   get_active_access_token_jti,
+   is_user_active
 )
 from src.core.security import hash_password,verify_password,create_access_token,create_refresh_token,create_random_token
 from datetime import datetime,timezone,timedelta
@@ -26,6 +27,7 @@ from .email_verification.repository import revoke_user_email_verification_tokens
 from secrets import token_urlsafe
 from hashlib import sha256
 from src.email.service import send_email
+from uuid import UUID
 
 
 
@@ -109,6 +111,22 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
 
        user_id = user.user_id
        password_hash = user.password_hash
+
+    if user.user.is_active is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hesabınız şu anda devre dışı bırakılmış durumda."
+        )   
+
+    if user.user.email_verified is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "Giriş yapabilmek için e-posta adresinizi doğrulamanız gerekiyor.",
+                "action": "resend_email_verification",
+                "action_label": "Doğrulama e-postasını yeniden gönder",
+            } 
+    )
     
     is_match = verify_password(form_data.password,password_hash)
     if not is_match:
@@ -120,17 +138,7 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
             detail="Hatalı eposta veya şifre"
     )
 
-    if user.user.email_verified is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": "Giriş yapabilmek için e-posta adresinizi doğrulamanız gerekiyor.",
-                "action": "resend_email_verification",
-                "action_label": "Doğrulama e-postasını yeniden gönder",
-            } 
-        )
-
-           
+       
     # * Writing Phase
     async with session.begin():
         # * Başarılı login'in tüm DB değişiklikleri aynı transaction içinde yapılır.
@@ -195,21 +203,28 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
 
 
 @handle_service_errors
-async def refresh_tokens(session:AsyncSession,jti:str):
+async def refresh_tokens(session:AsyncSession,jti:str,user_id:UUID):
   replay_detected = False
   session_detected = False
   session_refresh_token_detected = False
+ 
 
   now=datetime.now(timezone.utc)
 
   async with session.begin():
+      is_active = await is_user_active(user_id,session)  
+      if is_active is not True:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hesabınız şu anda devre dışı bırakılmış durumda."
+        )
+      
       active_session = await get_active_session(session,jti=jti)
-
       session_refresh_token = await get_refresh_jti(session,jti)
 
       # * Kullanılmış eski refresh token tekrar geldiyse, bağlı olduğu oturumu kapat.
       # * Bu, saldırganın rotation sırasında aldığı yeni refresh token'ı da geçersiz kılar.
-      if not active_session:
+      if active_session is None:
         if session_refresh_token and session_refresh_token.used_at:
             # * Tekrar kullanılmaya çalışılan refresh jtiye ait oturum.
             replayed_session = session_refresh_token.session
@@ -302,20 +317,20 @@ async def refresh_tokens(session:AsyncSession,jti:str):
         ),
     ])
   
-  # * Exeptionlar transaction dışında alındı
+  # * Exceptionlar transaction dışında alındı
   if replay_detected:
-         raise HTTPException(
-              status_code=status.HTTP_401_UNAUTHORIZED,
-              detail="Daha önce kullanılmış refresh token tespit edildi. Lütfen tekrar giriş yapın."
-          )   
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Daha önce kullanılmış refresh token tespit edildi. Lütfen tekrar giriş yapın."
+        )   
 
-  if not session_detected :
+  if session_detected is False:
        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Aktif oturum bulunamadı.Oturumunuzun süresi dolmuş veya çıkış yapılmış.Lütfen tekrar giriş yapın."
         )
  
-  if not session_refresh_token_detected :
+  if session_refresh_token_detected is False:
        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token oturum kaydı bulunamadı. Lütfen tekrar giriş yapın."
@@ -328,7 +343,7 @@ async def refresh_tokens(session:AsyncSession,jti:str):
 
 @handle_service_errors
 async def user_logout(session:AsyncSession,payload:dict[str,Any]):
-    user_id = payload["sub"]
+    
     access_jti = payload["jti"] 
     expires = payload["exp"]
 

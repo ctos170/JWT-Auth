@@ -2,15 +2,17 @@ from sqlalchemy import select,or_,update
 from sqlalchemy.orm import selectinload,joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models.models import User,User_Credential,Session,Token_Blacklist,Session_Token_Jtis
-from datetime import datetime,timezone,timedelta
-from fastapi import status
-from fastapi.exceptions import HTTPException
-from sqlalchemy.exc import IntegrityError
+from datetime import datetime,timezone
 from typing import Optional,Any
 from uuid import UUID
 from typing import Sequence
 
+async def is_user_active(id:UUID,session:AsyncSession):
+    is_active = await session.scalar(
+        select(User.is_active).where(User.id == id,User.is_active.is_(True))
+    )
 
+    return is_active
 
 async def get_user_by_email_or_phone_number(session:AsyncSession,email:str,phone_number:Optional[str]=None):
 
@@ -84,7 +86,7 @@ async def get_active_session(
     
     stmt = select(Session).options(selectinload(Session.session_jtis)).where(
         *expressions,
-        Session.is_revoked == False,
+        Session.is_revoked.is_(False),
         Session.expires_at > now
     ).with_for_update()
 

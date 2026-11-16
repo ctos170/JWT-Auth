@@ -7,11 +7,10 @@ from .service import register_user,user_login,refresh_tokens,user_logout
 from src.core.config import settings
 from src.core.dependencies import verify_refresh_token,get_access_payload
 from typing import Any
-from src.database.models.models import User
 from .password_reset.router import router as password_reset_router
 from .email_verification.router import router as email_verification_router
 from src.main import limiter
-
+from uuid import UUID
 
 router = APIRouter()
 
@@ -75,7 +74,7 @@ async def refresh(
 
    ):
 
-   result : dict[str, str] = await refresh_tokens(session,payload["jti"])
+   result : dict[str, str] = await refresh_tokens(session,payload["jti"],UUID(payload["sub"]))
 
    refresh_token = result["refresh_token"]
    token_exp = settings.REFRESH_TOKEN_EXPIRE_DAYS

@@ -7,11 +7,10 @@ from typing import Optional,Any
 from uuid import UUID
 
 
-async def get_user_by_id(id:UUID,session:AsyncSession):
+async def get_user_with_credential_by_id(id:UUID,session:AsyncSession):
     stmt = (
         select(User)
         .options(
-            selectinload(User.sessions),
             joinedload(User.credential)
         ).where(User.id == id)
     )
