@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import status,Request,BackgroundTasks
+from fastapi import status,BackgroundTasks
 from fastapi.exceptions import HTTPException
 from src.core.decorators import handle_service_errors
 from secrets import token_urlsafe
@@ -8,9 +8,9 @@ from datetime import datetime,timezone,timedelta
 from src.core.config import settings
 from src.database.models.models import Email_Verification_Token
 from src.email.service import send_email
-from ..repository import get_user_by_email_or_phone_number
+from ..repository import get_credential_by_email
 from .repository import revoke_user_email_verification_tokens,get_active_email_verificaion_token,get_email_verification_token_row
-from .schemas import Email_Verification_Request
+
 
 
 
@@ -28,12 +28,12 @@ async def resend_email_verification_token(
            "message":"Eposta adresiniz sistemimize kayıtlı ise eposta doğrulama bağlantınız gönderilecektir"
         }
         
-        user = await get_user_by_email_or_phone_number(session,email) 
+        credential = await get_credential_by_email(email,session) 
         
-        if not user or user.user.email_verified:
+        if not credential or credential.user.email_verified:
            return response
 
-        token = await get_active_email_verificaion_token(user.user_id,session)
+        token = await get_active_email_verificaion_token(credential.user_id,session)
 
         if token:
             passed_time = now - token.created_at
@@ -42,7 +42,7 @@ async def resend_email_verification_token(
             if passed_time < timeout:
                 return response
         
-        await revoke_user_email_verification_tokens(session,user.user_id)
+        await revoke_user_email_verification_tokens(session,credential.user_id)
 
             
         verification_token = token_urlsafe(32)
@@ -50,7 +50,7 @@ async def resend_email_verification_token(
 
         session.add(
             Email_Verification_Token(
-                user_id=user.user_id,
+                user_id=credential.user_id,
                 verification_token_hash=hashed_verification_token,
                 expires_at=now + timedelta(minutes=settings.EMAIL_VERIFICATION_EXPIRE_MINUTES)
             )

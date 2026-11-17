@@ -1,9 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime,timezone,timedelta
+from datetime import datetime,timezone
 from sqlalchemy import select,update
-from sqlalchemy.orm import selectinload,joinedload
-from sqlalchemy.exc import IntegrityError
-from typing import Optional,Any
+from sqlalchemy.orm import contains_eager
 from uuid import UUID
 from src.database.models.models import Password_Reset_Token,User
 
@@ -39,12 +37,14 @@ async def get_active_password_reset_token(user_id:UUID,session:AsyncSession):
 
 
 async def get_password_reset_token(token_hash:str,session:AsyncSession):
-    stmt = (
-        select(Password_Reset_Token).
-        options(joinedload(Password_Reset_Token.user).joinedload(User.credential))
+    result = await session.scalars(
+        select(Password_Reset_Token)
+        .join(Password_Reset_Token.user)
+        .join(User.credential)
+        .options(contains_eager(Password_Reset_Token.user).contains_eager(User.credential))
         .where(Password_Reset_Token.token_hash == token_hash)
-    ).with_for_update(of=Password_Reset_Token)
-
-    result = await session.scalars(stmt)
+        .with_for_update(of=Password_Reset_Token)
+    )
+        
 
     return result.unique().one_or_none()

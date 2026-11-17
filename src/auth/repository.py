@@ -1,5 +1,5 @@
 from sqlalchemy import select,or_,update
-from sqlalchemy.orm import selectinload,joinedload
+from sqlalchemy.orm import selectinload,joinedload,contains_eager
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models.models import User,User_Credential,Session,Token_Blacklist,Session_Token_Jtis
 from datetime import datetime,timezone
@@ -7,12 +7,30 @@ from typing import Optional,Any
 from uuid import UUID
 from typing import Sequence
 
+
+
+
+
 async def is_user_active(id:UUID,session:AsyncSession):
     is_active = await session.scalar(
         select(User.is_active).where(User.id == id,User.is_active.is_(True))
     )
 
     return is_active
+
+
+async def get_credential_by_email(email:str,session:AsyncSession):
+    credential = await session.scalars(
+        select(User_Credential)
+        .join(User_Credential.user)
+        .options(contains_eager(User_Credential.user))
+        .where(User_Credential.email == email)
+        .with_for_update(of=User_Credential)
+
+    )
+
+    return credential.unique().one_or_none()
+
 
 async def get_user_by_email_or_phone_number(session:AsyncSession,email:str,phone_number:Optional[str]=None):
 

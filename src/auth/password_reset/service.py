@@ -14,7 +14,8 @@ from src.auth.repository import (
     get_revoke_sessions_ids,
     get_revoke_sessions_access_token,
     get_jti_from_blacklist,
-    add_blacklist
+    add_blacklist,
+    get_credential_by_email
 )
 from .repository import revoke_user_reset_token,get_password_reset_token,get_active_password_reset_token
 from src.database.models.models import Password_Reset_Token
@@ -34,12 +35,12 @@ async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks
             "message":"Eposta adresiniz sistemimizde kayıtlı ise şifre sıfırlama bağlanısı gönredilecektir."
         }
        
-       user = await get_user_by_email_or_phone_number(session,email)
+       credential = await get_credential_by_email(email,session)
     
-       if not user:
+       if not credential:
             return response
 
-       active_token_row = await get_active_password_reset_token(user.user_id,session)
+       active_token_row = await get_active_password_reset_token(credential.user_id,session)
 
        if active_token_row:
             passed_time = now - active_token_row.created_at
@@ -49,7 +50,7 @@ async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks
                 return response
            
        
-       await revoke_user_reset_token(user.user_id,session)
+       await revoke_user_reset_token(credential.user_id,session)
        
        now = datetime.now(timezone.utc)
 
@@ -58,7 +59,7 @@ async def password_reset_request(email:EmailStr,background_tasks:BackgroundTasks
        
        session.add(
            Password_Reset_Token(
-               user_id = user.user_id,
+               user_id = credential.user_id,
                token_hash = hashed_reset_token,
                expires_at = now + timedelta(minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES)
            )
@@ -85,7 +86,6 @@ async def reset_user_password(form_data:Reset_Password_Request,session:AsyncSess
     raw_token=form_data.token
    
     token_hash = sha256(raw_token.encode("utf-8")).hexdigest()
-    password_hash = hash_password(new_password)
 
     async with session.begin():
 
@@ -104,6 +104,7 @@ async def reset_user_password(form_data:Reset_Password_Request,session:AsyncSess
             ) 
 
         # * Token geçerli
+        password_hash = hash_password(new_password)
         user = token_row.user
         # * Şifre değiştirildi. 
         user.credential.password_hash = password_hash
