@@ -1,23 +1,22 @@
 from pwdlib import PasswordHash
-import argon2
 import jwt
 from .config import settings
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 from fastapi.exceptions import HTTPException
 from fastapi import status
-
+import asyncio
 
 password_hash = PasswordHash.recommended()
 
 
-def hash_password(passsword:str) :
-    return password_hash.hash(passsword)
+async def hash_password_async(passsword:str) :
+   return await asyncio.to_thread(password_hash.hash,passsword)
 
 
-def verify_password(password:str,hashed_password:str):
-    return password_hash.verify(password,hashed_password)
+async def verify_password_async(password:str,hashed_password:str):
+    return await asyncio.to_thread(password_hash.verify,password,hashed_password)
 
 
 def create_random_token():

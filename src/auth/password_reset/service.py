@@ -21,7 +21,7 @@ from .repository import revoke_user_reset_token,get_password_reset_token,get_act
 from src.database.models.models import Password_Reset_Token
 from src.email.service import send_email
 from .schemas import Reset_Password_Request
-from src.core.security import hash_password
+from src.core.security import hash_password_async
 
 
 
@@ -104,7 +104,7 @@ async def reset_user_password(form_data:Reset_Password_Request,session:AsyncSess
             ) 
 
         # * Token geçerli
-        password_hash = hash_password(new_password)
+        password_hash = await hash_password_async(new_password)
         user = token_row.user
         # * Şifre değiştirildi. 
         user.credential.password_hash = password_hash

@@ -19,7 +19,7 @@ from .repository import (
    get_active_access_token_jti,
    is_user_active
 )
-from src.core.security import hash_password,verify_password,create_access_token,create_refresh_token,create_random_token
+from src.core.security import hash_password_async,verify_password_async,create_access_token,create_refresh_token,create_random_token
 from datetime import datetime,timezone,timedelta
 from src.core.config import settings
 from typing import Any
@@ -51,7 +51,7 @@ async def register_user(
             detail="Bu e-posta adresi zaten kullanımda."
         )
 
-    hashed_password = hash_password(form_data.password)
+    hashed_password = await hash_password_async(form_data.password)
 
     user_dict = form_data.model_dump(include={"name","surname","age"})
 
@@ -111,33 +111,34 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
 
        user_id = user.user_id
        password_hash = user.password_hash
+       
 
-    if user.user.is_active is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hesabınız şu anda devre dışı bırakılmış durumda."
-        )   
-
-    if user.user.email_verified is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": "Giriş yapabilmek için e-posta adresinizi doğrulamanız gerekiyor.",
-                "action": "resend_email_verification",
-                "action_label": "Doğrulama e-postasını yeniden gönder",
-            } 
-    )
-    
-    is_match = verify_password(form_data.password,password_hash)
+    is_match = await verify_password_async(form_data.password,password_hash)
     if not is_match:
         print(1)
         DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$42aXpYemRzeWRzZ2RzZ2RzZ2Q$FakeHashToPreventTimingAttacks"
-        verify_password(form_data.password,DUMMY_HASH)
+        await verify_password_async(form_data.password,DUMMY_HASH)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hatalı eposta veya şifre"
     )
 
+    if user.user.is_active is False:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hesabınız şu anda devre dışı bırakılmış durumda."
+    )   
+    
+    if user.user.email_verified is False:
+        raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "message": "Giriş yapabilmek için e-posta adresinizi doğrulamanız gerekiyor.",
+            "action": "resend_email_verification",
+            "action_label": "Doğrulama e-postasını yeniden gönder",
+        } 
+    )
+         
        
     # * Writing Phase
     async with session.begin():
