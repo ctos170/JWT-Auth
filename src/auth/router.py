@@ -29,7 +29,7 @@ async def register(
    
    result = await register_user(form_data,session,background_tasks)
 
-   return JSONResponse(content=result)
+   return JSONResponse(content=result,status_code=status.HTTP_201_CREATED)
 
 
 @router.post("/login",status_code=status.HTTP_200_OK,summary="Giriş")

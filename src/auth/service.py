@@ -17,7 +17,8 @@ from .repository import (
    get_refresh_jti,
    get_access_token_by_jti,
    get_active_access_token_jti,
-   is_user_active
+   is_user_active,
+   lock_user_for_update
 )
 from src.core.security import hash_password_async,verify_password_async,create_access_token,create_refresh_token,create_random_token
 from datetime import datetime,timezone,timedelta
@@ -144,7 +145,8 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
     async with session.begin():
         # * Başarılı login'in tüm DB değişiklikleri aynı transaction içinde yapılır.
         now=datetime.now(timezone.utc)
-
+        
+        await lock_user_for_update(session,user_id)
         await revoke_sessions(session,user_id)
         revoke_session_ids = await get_revoke_sessions_ids(session,user_id)
         live_access_rows = await get_revoke_sessions_access_token(session,revoke_session_ids)

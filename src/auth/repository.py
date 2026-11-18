@@ -9,6 +9,13 @@ from typing import Sequence
 
 
 
+async def lock_user_for_update(session:AsyncSession,user_id:UUID):
+    "Eş zamanlı giril isteğinde satırı kilitler."
+    await session.scalars(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+    )
 
 
 async def is_user_active(id:UUID,session:AsyncSession):
