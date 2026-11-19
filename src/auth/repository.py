@@ -6,6 +6,7 @@ from datetime import datetime,timezone
 from typing import Optional,Any
 from uuid import UUID
 from typing import Sequence
+from pydantic_extra_types.phone_numbers import PhoneNumber 
 
 
 
@@ -39,26 +40,22 @@ async def get_credential_by_email(email:str,session:AsyncSession):
     return credential.unique().one_or_none()
 
 
-async def get_user_by_email_or_phone_number(session:AsyncSession,email:str,phone_number:Optional[str]=None):
+async def find_user_by_email(email:str,session:AsyncSession):
+    result = await session.scalars(
+        select(User_Credential)
+        .options(joinedload(User_Credential.user))
+        .where(User_Credential.email == email)
+    )
 
-    expressions = []
+    return result.unique().one_or_none()
 
-    expressions.append(User_Credential.email == email)
 
-    if phone_number:
-        expressions.append(User_Credential.phone_number == phone_number)    
+async def find_user_by_phone_number(phone_number:PhoneNumber,session:AsyncSession):
+    result = await session.scalars(
+        select(User_Credential)
+        .where(User_Credential.phone_number == phone_number)
+    )
 
-    
-    stmt = (
-            select(User_Credential)
-            .options(joinedload(User_Credential.user))
-            .where(
-                or_(*expressions)
-                )
-            )
-    
-    result = await session.scalars(stmt)
-        
     return result.unique().one_or_none()
 
 

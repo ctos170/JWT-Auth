@@ -26,6 +26,7 @@ async def test_successful_registration(client: AsyncClient, test_session_factory
         "name": "TestUser",
         "surname": "TestUserSurname",
         "email": first_requests_email,
+        "phone_number":"+90 532 123 45 67",
         "age": 21,
         "password": "P@ssw0rd!",
     }
@@ -34,6 +35,7 @@ async def test_successful_registration(client: AsyncClient, test_session_factory
         "name": "TestUser2",
         "surname": "TestUserSurname2",
         "email": second_requests_email,
+        "phone_number": "+90 532 321 54 76",
         "age": 21,
         "password": "P@ssw0rd!",
     }

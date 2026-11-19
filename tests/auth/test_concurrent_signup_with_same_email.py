@@ -38,14 +38,14 @@ async def test_concurrent_signups_with_same_email_return_specific_conflict(
     attempt_names = [form_values["name"] for form_values in attempts]
 
     # İki isteğin de e-posta kontrolünü yazma başlamadan önce bitirmesini sağla.
-    original_lookup = auth_service.get_user_by_email_or_phone_number
+    original_lookup = auth_service.find_user_by_email
     lookup_count = 0
     lookup_results = []
     both_lookups_finished = asyncio.Event()
 
-    async def synchronized_lookup(session, requested_email, phone_number=None):
+    async def synchronized_lookup(requested_email,session,):
         nonlocal lookup_count
-        result = await original_lookup(session, requested_email, phone_number)
+        result = await original_lookup(requested_email,session,)
         lookup_results.append(result)
         lookup_count += 1
         if lookup_count == 2:
@@ -55,7 +55,7 @@ async def test_concurrent_signups_with_same_email_return_specific_conflict(
 
     monkeypatch.setattr(
         auth_service,
-        "get_user_by_email_or_phone_number",
+        "find_user_by_email",
         synchronized_lookup,
     )
 

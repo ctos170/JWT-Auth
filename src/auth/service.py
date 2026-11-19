@@ -5,7 +5,8 @@ from fastapi.exceptions import HTTPException
 from src.core.decorators import handle_service_errors
 from .schemas import Register_Request,Login_Request
 from .repository import (
-   get_user_by_email_or_phone_number,
+   find_user_by_phone_number,
+   find_user_by_email,
    create_user,
    revoke_sessions,
    create_session,add_blacklist,
@@ -40,18 +41,26 @@ async def register_user(
     ):
 
     async with session.begin():
-      user = await get_user_by_email_or_phone_number(
-        session,
-        form_data.email,
-        phone_number=form_data.phone_number
-    )
-
-      if user :
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Bu e-posta adresi zaten kullanımda."
+      user_credential_by_email = await find_user_by_email(form_data.email,session,)
+      
+      if user_credential_by_email :
+          raise HTTPException(
+             status_code=status.HTTP_409_CONFLICT,
+             detail="Bu e-posta adresi zaten kullanımda."
+       ) 
+       
+      if form_data.phone_number:  
+        user_credential_by_phone_number = await find_user_by_phone_number(
+           form_data.phone_number,
+           session
         )
 
+        if user_credential_by_phone_number:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Bu telefon numarası zaten kullanımda."  
+        )
+              
     hashed_password = await hash_password_async(form_data.password)
 
     user_dict = form_data.model_dump(include={"name","surname","age"})
@@ -103,15 +112,16 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
     
     # * Reading Phase
     async with session.begin():
-       user = await get_user_by_email_or_phone_number(session,form_data.email)
-       if not user:
+       user_credential = await find_user_by_email(form_data.email,session)
+      
+       if not user_credential:
           raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hatalı eposta veya şifre"
        )
 
-       user_id = user.user_id
-       password_hash = user.password_hash
+       user_id = user_credential.user_id
+       password_hash = user_credential.password_hash
        
 
     is_match = await verify_password_async(form_data.password,password_hash)
@@ -124,13 +134,13 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
             detail="Hatalı eposta veya şifre"
     )
 
-    if user.user.is_active is False:
+    if user_credential.user.is_active is False:
          raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Hesabınız şu anda devre dışı bırakılmış durumda."
     )   
     
-    if user.user.email_verified is False:
+    if user_credential.user.email_verified is False:
         raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail={

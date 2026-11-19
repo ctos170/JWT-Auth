@@ -9,7 +9,6 @@ from secrets import token_urlsafe
 from hashlib import sha256
 from pydantic import EmailStr
 from src.auth.repository import (
-    get_user_by_email_or_phone_number,
     revoke_sessions,
     get_revoke_sessions_ids,
     get_revoke_sessions_access_token,

@@ -58,6 +58,11 @@ def handle_service_errors(func: Callable):
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Bu e-posta adresi zaten kullanımda.",
                 ) from e
+            elif constraint_name == "user_credentials_phone_number_key":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Bu telefon numarası zaten kullanımda."
+                ) from e
 
             # Diğer bütünlük ihlalleri genel hata mesajıyla dönmeye devam eder.
             print(f"⚠️ Integrity Error: {str(e)}")
