@@ -207,8 +207,8 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
 
         await create_session_token_jti(
             session,
-            access_jti_dict=access_jti_dict,
-            refresh_jti_dict=refresh_jti_dict,
+            access_jti_dict,
+            refresh_jti_dict,
         )
 
     # * begin bloğundan normal çıkış commit edildi; tokenları endpoint'e dön.
@@ -232,7 +232,7 @@ async def refresh_tokens(session:AsyncSession,jti:str,user_id:UUID):
             detail="Hesabınız şu anda devre dışı bırakılmış durumda."
         )
       
-      active_session = await get_active_session(session,jti=jti)
+      active_session = await get_active_session(session,jti=jti,user_id=user_id)
       session_refresh_token = await get_refresh_jti(session,jti)
 
       # * Kullanılmış eski refresh token tekrar geldiyse, bağlı olduğu oturumu kapat.
@@ -301,8 +301,6 @@ async def refresh_tokens(session:AsyncSession,jti:str,user_id:UUID):
        session_detected = True 
        session_refresh_token_detected = True
 
-       user_id = active_session.user_id
-
        refresh_jti = create_random_token()
        access_jti = create_random_token()
        access_token = create_access_token(str(user_id),access_jti)
@@ -315,20 +313,22 @@ async def refresh_tokens(session:AsyncSession,jti:str,user_id:UUID):
        active_session.updated_at = now
 
         # *  Yeni access ve refresh JTI'lerini aynı oturumun geçmişine ekle.
-       session.add_all([
-        Session_Token_Jtis(
-            jti=access_jti,
-            session_id=active_session.id,
-            token_type="access",
-            expires_at=now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-        ),
-        Session_Token_Jtis(
-            jti=refresh_jti,
-            session_id=active_session.id,
-            token_type="refresh",
-            expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-        ),
-    ])
+       access_jti_dict = {
+        "jti":access_jti,
+        "session_id":active_session.id,
+        "token_type":"access",
+        "expires_at":now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+       } 
+
+       refresh_jti_dict = {
+         "jti":refresh_jti,
+         "session_id":active_session.id,
+         "token_type":"refresh",
+         "expires_at":now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        } 
+       
+       await create_session_token_jti(session,access_jti_dict,refresh_jti_dict)
+
   
   # * Exceptionlar transaction dışında alındı
   if replay_detected:

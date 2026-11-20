@@ -167,19 +167,16 @@ async def get_refresh_jti(session:AsyncSession,jti:str):
 
 async def create_session_token_jti(
     session:AsyncSession,
-    access_jti_dict: Optional[dict[str,Any]]=None,
-    refresh_jti_dict:Optional[dict[str,Any]]=None
+    access_jti_dict: dict[str,Any],
+    refresh_jti_dict:dict[str,Any]
     ):
+    session.add_all(
+    [
+      Session_Token_Jtis(**access_jti_dict),
+      Session_Token_Jtis(**refresh_jti_dict)
+    ]        
+    )
 
-
-    if access_jti_dict:
-     session_access_token_jti = Session_Token_Jtis(**access_jti_dict)
-     session.add(session_access_token_jti)
-     
-    if refresh_jti_dict:
-     session_refresh_token_jti = Session_Token_Jtis(**refresh_jti_dict)
-     session.add(session_refresh_token_jti)
-        
     
 async def get_revoke_sessions_ids(session:AsyncSession,user_id:UUID):
     "iptal edilen oturumların idlerini bulma"
