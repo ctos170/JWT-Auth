@@ -9,7 +9,7 @@ from src.core.dependencies import verify_refresh_token,get_access_payload
 from typing import Any
 from .password_reset.router import router as password_reset_router
 from .email_verification.router import router as email_verification_router
-from src.main import limiter
+from src.core.limiter import limiter
 from uuid import UUID
 
 router = APIRouter()

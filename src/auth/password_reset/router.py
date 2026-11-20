@@ -7,7 +7,8 @@ from typing import Any
 from pydantic import EmailStr
 from src.auth.password_reset import service
 from .schemas import Reset_Password_Request
-from src.main import limiter
+from src.core.limiter import limiter
+
 
 
 router = APIRouter()

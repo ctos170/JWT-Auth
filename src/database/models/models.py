@@ -23,7 +23,7 @@ class User(Base):
     surname : Mapped[str] = mapped_column(String(175))
     age: Mapped[int] = mapped_column(Integer)
     is_active : Mapped[bool] = mapped_column(Boolean,default=True)
-    email_verified : Mapped[bool] = mapped_column(Boolean,default=sa.false())
+    email_verified : Mapped[bool] = mapped_column(Boolean,default=False,server_default=sa.false())
 
     created_at: Mapped[datetime] = mapped_column(
             DateTime(timezone=True),
