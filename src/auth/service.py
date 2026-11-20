@@ -126,7 +126,6 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
 
     is_match = await verify_password_async(form_data.password,password_hash)
     if not is_match:
-        print(1)
         DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$42aXpYemRzeWRzZ2RzZ2RzZ2Q$FakeHashToPreventTimingAttacks"
         await verify_password_async(form_data.password,DUMMY_HASH)
         raise HTTPException(

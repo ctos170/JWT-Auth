@@ -15,7 +15,7 @@ async def revoke_user_reset_token(user_id:UUID,session:AsyncSession):
         update(Password_Reset_Token)
         .where(
             Password_Reset_Token.user_id == user_id,
-            Password_Reset_Token.expires_at > now,
+            Password_Reset_Token.expires_at >= now,
             Password_Reset_Token.revoked_at.is_(None),
             Password_Reset_Token.used_at.is_(None),
         )
@@ -32,7 +32,7 @@ async def get_active_password_reset_token(user_id:UUID,session:AsyncSession):
             Password_Reset_Token.user_id == user_id,
             Password_Reset_Token.used_at.is_(None),
             Password_Reset_Token.revoked_at.is_(None),
-            Password_Reset_Token.expires_at > now
+            Password_Reset_Token.expires_at >= now
         )
     )
 
