@@ -21,7 +21,13 @@ from .repository import (
    is_user_active,
    lock_user_for_update
 )
-from src.core.security import hash_password_async,verify_password_async,create_access_token,create_refresh_token,create_random_token
+from src.core.security import (
+    hash_password_async,
+    verify_password_async,
+    create_access_token,
+    create_refresh_token,
+    create_random_token,
+    )
 from datetime import datetime,timezone,timedelta
 from src.core.config import settings
 from typing import Any
@@ -30,7 +36,7 @@ from secrets import token_urlsafe
 from hashlib import sha256
 from src.email.service import send_email
 from uuid import UUID
-
+from time import perf_counter
 
 
 @handle_service_errors
@@ -113,8 +119,10 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
     # * Reading Phase
     async with session.begin():
        user_credential = await find_user_by_email(form_data.email,session)
-      
+       
        if not user_credential:
+          DUMMY_HASH =  "$argon2id$v=19$m=65536,t=3,p=4$7GEUgijIjeObAsdIlLnNQg$9qGU5ErREUpoIqtFf23xN7M9Si1VxUxOvypvw9xbIH8"
+          await verify_password_async(form_data.password,DUMMY_HASH)   
           raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hatalı eposta veya şifre"
@@ -123,11 +131,8 @@ async def user_login(form_data:Login_Request,req:Request,session:AsyncSession):
        user_id = user_credential.user_id
        password_hash = user_credential.password_hash
        
-
     is_match = await verify_password_async(form_data.password,password_hash)
     if not is_match:
-        DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$42aXpYemRzeWRzZ2RzZ2RzZ2Q$FakeHashToPreventTimingAttacks"
-        await verify_password_async(form_data.password,DUMMY_HASH)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hatalı eposta veya şifre"
