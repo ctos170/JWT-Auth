@@ -4,11 +4,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import delete, func, select
 from sqlalchemy import exc
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.models import User, User_Credential
 from src.auth import service
-from typing import Any
+
 
 
 pytestmark = pytest.mark.anyio
