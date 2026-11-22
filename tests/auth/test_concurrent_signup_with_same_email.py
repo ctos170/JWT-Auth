@@ -43,9 +43,9 @@ async def test_concurrent_signups_with_same_email_return_specific_conflict(
     lookup_results = []
     both_lookups_finished = asyncio.Event()
 
-    async def synchronized_lookup(requested_email,session,):
+    async def synchronized_lookup(requested_email,session):
         nonlocal lookup_count
-        result = await original_lookup(requested_email,session,)
+        result = await original_lookup(requested_email,session)
         lookup_results.append(result)
         lookup_count += 1
         if lookup_count == 2:
