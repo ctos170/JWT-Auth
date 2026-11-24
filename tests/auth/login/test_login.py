@@ -1,8 +1,6 @@
 import asyncio
-from uuid import uuid4 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select,update
 from sqlalchemy import exc
 from src.auth import service
 from src.database.models.models import User, User_Credential,Session,Session_Token_Jtis
@@ -11,86 +9,84 @@ from src.database.models.models import User, User_Credential,Session,Session_Tok
 
 pytestmark = pytest.mark.anyio
 
+test_params = (
+"email,password,expected_status,expected_session_count,expected_jti_count,is_active,email_verified"
+)
 
-async def test_create_user(client:AsyncClient,test_session_factory):
-    "Test Kullanıcısı oluşturma"
-    form_data = {
-        "name": "TestUser",
-        "surname": "TestUserSurname",
-        "email": "login-test@example.com",
-        "phone_number":"+90 532 123 45 67",
-        "age": 21,
-        "password": "P@ssw0rd!",
-    }
+test_data=[
+    ("login-test@example.com","P@ssw0rd!",200,1,2,True,True),# * Başarılı giriş
+    ("wrong@example.com","P@ssw0rd!",400,0,0,True,True),# * Olmayan eposta
+    ("login-test@example.com","WrongPass",400,0,0,True,True),# * Hatalı parola
+    ("login-test@example","P@ssd!",422,0,0,True,True), # * Geçersiz istek verisi
+    ("login-test@example.com","P@ssw0rd!",403,0,0,False,True), # * Devre dışı hesap
+    ("login-test@example.com","P@ssw0rd!",403,0,0,True,False),# * Doğrulanmamış eposta
+]
 
-    async def request():
-        return await client.post("/api/auth/register",json=form_data)
+@pytest.mark.parametrize(
+test_params,        
+test_data
+)
+async def test_login(
+    email,
+    password,
+    expected_status,
+    expected_session_count,
+    expected_jti_count,
+    is_active,
+    email_verified,
+    client,
+    test_session_factory,
+    login_user_data
+    ):
+      
+      
+      form_data = {
+         "email": email ,
+         "password": password  
+      }
 
-    reponse = await request()
+      async with test_session_factory.begin() as session:
+          await session.execute(
+              update(User)
+              .where(User.id == login_user_data)
+              .values(is_active=is_active,email_verified=email_verified)
+          )
 
-    assert reponse.status_code == 201
+      async def login_request():
+          return await client.post("api/auth/login",json=form_data)
 
-    async with test_session_factory() as session:
-        saved_count = await session.scalar(
-            select(func.count())
-            .select_from(User_Credential)
-            .where(User_Credential.email == form_data["email"])
-        )
-              
-    assert saved_count == 1
-
-
-
-async def test_successful_login(client,test_session_factory):
-    "Başarılı giriş testi"
-    form_data = {
-       "email": "login-test@example.com"  ,
-       "password": "P@ssw0rd!"  
-    }
-
-    async def login_request():
-        return await client.post("api/auth/login",json=form_data)
-
-    try:
+      try:
         response = await login_request()
 
-        assert response.status_code == 200
+        assert response.status_code == expected_status
 
         async with test_session_factory() as session:
-             user_id = await session.scalar(
-                select(User_Credential.user_id)
-                .where(User_Credential.email == form_data["email"])
-             )
              session_count = await session.scalar(
                  select(func.count())
                  .select_from(Session)
-                 .where(Session.user_id == user_id)
+                 .where(Session.user_id == login_user_data)
              )
-             session_id =  await session.scalar(
+             session_id = await session.scalar(
                  select(Session.id)
-                 .where(Session.user_id == user_id)
+                 .where(Session.user_id == login_user_data)
              )
-
              jti_count = await session.scalar(
                  select(func.count())
                  .select_from(Session_Token_Jtis)
                  .where(Session_Token_Jtis.session_id == session_id)
              )
 
-        assert session_count == 1     
-        assert jti_count == 2
+        assert session_count == expected_session_count
+        assert jti_count == expected_jti_count
         
-    finally:
-       async with test_session_factory.begin() as session :
-        user_id  = await session.scalar(
-            select(User_Credential.user_id)
-            .where(User_Credential.email==form_data["email"])
-        )  
+      finally:
+         async with test_session_factory.begin() as session :
+            await session.execute(
+               delete(Session)
+               .where(Session.user_id == login_user_data)
+            )
 
-        await session.execute(
-            delete(Session)
-            .where(Session.user_id == user_id)
-        )
+
 
 
 

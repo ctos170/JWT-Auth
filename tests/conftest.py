@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.database.db import get_db
 from src.main import app
 from httpx import ASGITransport, AsyncClient
-from fastapi import Depends
+from sqlalchemy import delete, func, select
+from src.database.models.models import  User_Credential,User
+from src.core.security import hash_password_async
 
 
 # Load the project .env so the test suite can read TEST_DATABASE_URL.
@@ -59,3 +61,62 @@ async def client(test_session_factory):
             yield client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def login_user_data(test_session_factory): 
+    """
+    Giriş testleri için test kullanıcısı oluşturan ve
+    sonrasında silen fixture
+    """
+    
+    user_dict={
+      "name": "TestUser",
+      "surname": "TestUserSurname",
+      "age": 21,
+    }
+
+    credential_dict = {
+      "email": "login-test@example.com",
+      "phone_number":"+90 532 123 45 67",
+    }
+
+    password_hash = await hash_password_async("P@ssw0rd!")
+
+    async with test_session_factory.begin() as session:
+        user = User(**user_dict)
+        session.add(user)
+        
+        await session.flush()
+
+        credential_dict["user_id"] = user.id # type:ignore
+        credential_dict["password_hash"] = password_hash
+        credential = User_Credential(**credential_dict)
+
+        session.add(credential)
+
+    user_id = user.id
+    
+    async with test_session_factory() as session:
+        user_count = await session.scalar(
+          select(func.count())
+          .select_from(User)
+          .where(User.id == user_id)
+        )
+        credential_count = await session.scalar(
+            select(func.count())
+            .select_from(User_Credential)
+            .where(User_Credential.user_id == user_id)
+        )
+
+    assert user_count == 1
+    assert credential_count == 1
+       
+    yield user_id 
+    
+    async with test_session_factory.begin() as session:
+        await session.execute(
+            delete(User)
+            .where(User.id == user_id)
+        )              
+  
