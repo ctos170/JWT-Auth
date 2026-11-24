@@ -69,54 +69,61 @@ async def login_user_data(test_session_factory):
     Giriş testleri için test kullanıcısı oluşturan ve
     sonrasında silen fixture
     """
+    created_user_ids = []
     
-    user_dict={
-      "name": "TestUser",
-      "surname": "TestUserSurname",
-      "age": 21,
-    }
+    async def create_user(is_active=True, email_verified=True):
+       user_dict={
+         "name": "TestUser",
+         "surname": "TestUserSurname",
+         "age": 21,
+         "is_active":is_active,
+         "email_verified":email_verified
+       }
+   
+       credential_dict = {
+         "email": "login-test@example.com",
+         "phone_number":"+90 532 123 45 67",
+       }
 
-    credential_dict = {
-      "email": "login-test@example.com",
-      "phone_number":"+90 532 123 45 67",
-    }
+       password_hash = await hash_password_async("P@ssw0rd!")
 
-    password_hash = await hash_password_async("P@ssw0rd!")
-
-    async with test_session_factory.begin() as session:
-        user = User(**user_dict)
-        session.add(user)
-        
-        await session.flush()
-
-        credential_dict["user_id"] = user.id # type:ignore
-        credential_dict["password_hash"] = password_hash
-        credential = User_Credential(**credential_dict)
-
-        session.add(credential)
-
-    user_id = user.id
-    
-    async with test_session_factory() as session:
-        user_count = await session.scalar(
-          select(func.count())
-          .select_from(User)
-          .where(User.id == user_id)
-        )
-        credential_count = await session.scalar(
-            select(func.count())
-            .select_from(User_Credential)
-            .where(User_Credential.user_id == user_id)
-        )
-
-    assert user_count == 1
-    assert credential_count == 1
+       async with test_session_factory.begin() as session:
+          user = User(**user_dict)
+          session.add(user)
+          
+          await session.flush()
+          user_id = user.id
+          
+          credential_dict["user_id"] = user_id # type:ignore
+          credential_dict["password_hash"] = password_hash
+          credential = User_Credential(**credential_dict)
+  
+          session.add(credential)
+          created_user_ids.append(user_id)
        
-    yield user_id 
+       async with test_session_factory() as session:
+          user_count = await session.scalar(
+              select(func.count())
+              .select_from(User)
+              .where(User.id == user_id)
+          )
+          credential_count = await session.scalar(
+              select(func.count())
+              .select_from(User_Credential)
+              .where(User_Credential.user_id == user_id)
+          )
+         
+          assert user_count == 1
+          assert credential_count == 1
+               
+       return user_id
+    
+
+    yield create_user
     
     async with test_session_factory.begin() as session:
         await session.execute(
             delete(User)
-            .where(User.id == user_id)
+            .where(User.id.in_(created_user_ids))
         )              
   

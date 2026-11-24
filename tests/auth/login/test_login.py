@@ -39,18 +39,15 @@ async def test_login(
     login_user_data
     ):
       
-      
+      user_id = await login_user_data(
+         is_active=is_active,
+         email_verified=email_verified,
+      )
+
       form_data = {
          "email": email ,
          "password": password  
       }
-
-      async with test_session_factory.begin() as session:
-          await session.execute(
-              update(User)
-              .where(User.id == login_user_data)
-              .values(is_active=is_active,email_verified=email_verified)
-          )
 
       async def login_request():
           return await client.post("api/auth/login",json=form_data)
@@ -64,11 +61,11 @@ async def test_login(
              session_count = await session.scalar(
                  select(func.count())
                  .select_from(Session)
-                 .where(Session.user_id == login_user_data)
+                 .where(Session.user_id == user_id)
              )
              session_id = await session.scalar(
                  select(Session.id)
-                 .where(Session.user_id == login_user_data)
+                 .where(Session.user_id == user_id)
              )
              jti_count = await session.scalar(
                  select(func.count())
@@ -83,7 +80,7 @@ async def test_login(
          async with test_session_factory.begin() as session :
             await session.execute(
                delete(Session)
-               .where(Session.user_id == login_user_data)
+               .where(Session.user_id == user_id)
             )
 
 
