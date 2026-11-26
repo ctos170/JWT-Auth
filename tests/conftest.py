@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select
 from src.database.models.models import  User_Credential,User
 from src.core.security import hash_password_async
+from collections.abc import AsyncGenerator
 
 
 # Load the project .env so the test suite can read TEST_DATABASE_URL.
@@ -27,7 +28,7 @@ def anyio_backend():
 
 
 @pytest.fixture
-async def test_session_factory(anyio_backend):
+async def test_session_factory(anyio_backend) -> AsyncGenerator[async_sessionmaker[AsyncSession],None]:
     # Each test gets its own engine; concurrent tasks get separate sessions
     # from this shared factory.
     engine = create_async_engine(str(TEST_DATABASE_URL), echo=False)

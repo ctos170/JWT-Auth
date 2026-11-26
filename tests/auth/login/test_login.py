@@ -2,9 +2,7 @@ import asyncio
 import pytest
 from sqlalchemy import delete, func, select,update
 from src.database.models.models import Session,Session_Token_Jtis,Token_Blacklist
-from sqlalchemy.ext.asyncio import AsyncSession
-
-
+from sqlalchemy.ext.asyncio import async_sessionmaker,AsyncSession
 
 pytestmark = pytest.mark.anyio
 
@@ -34,7 +32,7 @@ async def test_login(
     is_active,
     email_verified,
     client,
-    test_session_factory,
+    test_session_factory:async_sessionmaker[AsyncSession],
     login_user_data
     ):
       
@@ -83,7 +81,15 @@ async def test_login(
             )
 
 
-async def test_login_revokes_previous_sessions(client,test_session_factory,login_user_data):
+async def test_login_revokes_previous_sessions(
+    client,
+    test_session_factory:async_sessionmaker[AsyncSession],
+    login_user_data):
+    """
+    Aynı kullanıcı ile sıralı istek testi.
+    Önceki oturum iptal edilmeli,önceki oturuma ait access jti
+    blackliste eklenmeli.
+    """
     user_id = await login_user_data()
     previous_access_jti: str = ""
 
@@ -147,9 +153,9 @@ async def test_login_revokes_previous_sessions(client,test_session_factory,login
                 )
             )
             
-            previous_access_jti = access_jti
+            previous_access_jti = access_jti # type: ignore
             
-            blaclisted_jti_count = await session.scalar(
+            blacklisted_jti_count = await session.scalar(
               select(func.count())
               .select_from(Token_Blacklist)
               .where(
@@ -160,7 +166,7 @@ async def test_login_revokes_previous_sessions(client,test_session_factory,login
         assert session_count == 2
         assert jti_count == 4
         assert revoke_session_count == 1
-        assert blaclisted_jti_count == 1
+        assert blacklisted_jti_count == 1
 
     finally:
         async with test_session_factory.begin() as session:
@@ -170,7 +176,113 @@ async def test_login_revokes_previous_sessions(client,test_session_factory,login
             )
 
 
+async def test_concurrent_login_same_user(
+    client,
+    test_session_factory:async_sessionmaker[AsyncSession],
+    login_user_data):
+    "aynı kullanıcıyla üç eşzamanlı giriş testi"
+  
+    user_id = await login_user_data()
+    previous_access_jtis: list[str] = []
+    
+  
+    form_data = {
+          "email":"login-test@example.com",
+          "password":"P@ssw0rd!" 
+      }
+      
+    async def login_request():
+        return await client.post("api/auth/login",json=form_data)
 
+    try:
+       responses = await asyncio.gather(
+           login_request(),
+           login_request(),
+           login_request(),
+           return_exceptions=True
+       )
+
+       assert [response.status_code for response in responses] == [200, 200, 200] # type:ignore
+
+       async with test_session_factory() as session:
+           session_count = await session.scalar(
+               select(func.count())
+               .select_from(Session)
+               .where(Session.user_id == user_id)
+           )
+          
+           active_session_count = await session.scalar(
+               select(func.count())
+               .select_from(Session)
+               .where(
+                   Session.user_id == user_id,
+                   Session.is_revoked.is_(False),
+                )
+           )
+
+           revoke_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(
+                    Session.user_id == user_id,
+                    Session.is_revoked.is_(True),
+                )
+            )
+           
+           result = await session.scalars(
+                select(Session.id)
+                .where(Session.user_id == user_id)
+            )
+           
+           session_ids = result.all()
+
+           jti_count = await session.scalar(
+               select(func.count())
+               .select_from(Session_Token_Jtis)
+               .where(Session_Token_Jtis.session_id.in_(session_ids))
+           )
+
+           revoke_session_result = await session.scalars(
+               select(Session.id)
+               .where(
+                   Session.user_id == user_id,
+                   Session.is_revoked.is_(True)
+               )
+           )
+           
+           revoke_session_ids = revoke_session_result.all()
+
+           revoke_access_result = await session.scalars(
+               select(Session_Token_Jtis.jti)
+               .where(
+                   Session_Token_Jtis.session_id.in_(revoke_session_ids),
+                   Session_Token_Jtis.token_type == "access"
+                )
+           )
+          
+           revoke_access_jtis = revoke_access_result.all()
+
+           previous_access_jtis = list(revoke_access_jtis)
+
+           blacklisted_jti_count = await session.scalar(
+               select(func.count())
+               .select_from(Token_Blacklist)
+               .where(Token_Blacklist.jti.in_(revoke_access_jtis))
+           )
+
+       assert session_count == 3   
+       assert active_session_count == 1
+       assert revoke_session_count == 2
+       assert jti_count == 6
+       assert blacklisted_jti_count == 2
+
+       
+    finally:
+        async with test_session_factory.begin() as session:
+            await session.execute(
+                delete(Token_Blacklist)
+                .where(Token_Blacklist.jti.in_(previous_access_jtis))
+            )
 
 
 
