@@ -11,7 +11,7 @@ from sqlalchemy import delete, func, select
 from src.database.models.models import  User_Credential,User
 from src.core.security import hash_password_async
 from collections.abc import AsyncGenerator
-
+from uuid import UUID
 
 # Load the project .env so the test suite can read TEST_DATABASE_URL.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -127,4 +127,93 @@ async def login_user_data(test_session_factory):
             delete(User)
             .where(User.id.in_(created_user_ids))
         )              
-  
+
+
+@pytest.fixture
+async def login_users_data(test_session_factory):
+    """
+    Users are created for log in test and deleted.
+    when 2 different users send concurrent login request 
+    this fixture gives us users id.
+    """
+    created_user_ids :list[UUID] = []
+
+    async def create_user(is_active=True,email_verified=True):
+        user_dict={
+            "name": "TestUser",
+            "surname": "TestUserSurname",
+            "age": 21,
+            "is_active":is_active,
+            "email_verified":email_verified
+        }
+            
+        password_hash = await hash_password_async("P@ssw0rd")
+
+        async with test_session_factory.begin() as session:
+            first_user = User(**user_dict)
+            second_user = User(**user_dict)
+
+            session.add(first_user)
+            session.add(second_user)
+
+            await session.flush()
+
+            first_users_id = first_user.id
+            second_users_id = second_user.id
+
+            created_user_ids.extend([first_users_id,second_users_id])
+
+            session.add_all(
+            [
+                User_Credential(
+                    user_id=first_users_id,
+                    email="testUser@example.com",
+                    phone_number="+90 532 123 45 67",
+                    password_hash=password_hash
+                ),
+                User_Credential(
+                    user_id=second_users_id,
+                    email="login-test@example.com",
+                    phone_number="+90 352 453 95 17",
+                    password_hash=password_hash
+                )
+            ]
+        )
+
+
+        async with test_session_factory() as session:
+            user_count = await session.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.id.in_(created_user_ids))
+            )
+
+            credential_count = await session.scalar(
+                select(func.count())
+                .select_from(User_Credential)
+                .where(User_Credential.user_id.in_(created_user_ids))
+            )
+
+        assert user_count == 2
+        assert credential_count == 2  
+        
+        return first_users_id,second_users_id   
+
+      
+    yield create_user
+
+    async with test_session_factory.begin() as session:
+        await session.execute(
+            delete(User)
+            .where(User.id.in_(created_user_ids))
+        )            
+            
+
+
+
+
+
+
+
+
+

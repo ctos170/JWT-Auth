@@ -35,6 +35,7 @@ async def test_login(
     test_session_factory:async_sessionmaker[AsyncSession],
     login_user_data
     ):
+      "basic login scenarios"
       
       user_id = await login_user_data(
          is_active=is_active,
@@ -86,9 +87,9 @@ async def test_login_revokes_previous_sessions(
     test_session_factory:async_sessionmaker[AsyncSession],
     login_user_data):
     """
-    Aynı kullanıcı ile sıralı istek testi.
-    Önceki oturum iptal edilmeli,önceki oturuma ait access jti
-    blackliste eklenmeli.
+    Sequential login test with same user
+    Previous sessions have to revoked.
+    Active access tokens associated with previous sessions have to be added to the blacklist.
     """
     user_id = await login_user_data()
     previous_access_jti: str = ""
@@ -180,7 +181,12 @@ async def test_concurrent_login_same_user(
     client,
     test_session_factory:async_sessionmaker[AsyncSession],
     login_user_data):
-    "aynı kullanıcıyla üç eşzamanlı giriş testi"
+    """"
+    3 concurrent login test with same user.
+    previous sessions associated with user have to be revoked.
+    Only one session should be active.
+    Active access tokens associated with previous sessions have to be added to the blacklist.
+    """
   
     user_id = await login_user_data()
     previous_access_jtis: list[str] = []
@@ -276,7 +282,6 @@ async def test_concurrent_login_same_user(
        assert jti_count == 6
        assert blacklisted_jti_count == 2
 
-       
     finally:
         async with test_session_factory.begin() as session:
             await session.execute(
@@ -285,7 +290,112 @@ async def test_concurrent_login_same_user(
             )
 
 
+async def test_concurrent_login_with_different_users(
+    login_users_data,
+    client,
+    test_session_factory:async_sessionmaker[AsyncSession]
+    ):
+        """
+        conncurrent login test with different users
+        """
+        first_user_id,second_user_id = await login_users_data()
+        user_ids= [first_user_id,second_user_id]
+    
+        password="P@ssw0rd"
+        first_users_email="testUser@example.com"
+        second_users_email = "login-test@example.com"
+    
+        async def login_request(form_data):
+           return await client.post("/api/auth/login",json=form_data)
 
+        responses = await asyncio.gather(
+          login_request({"email":first_users_email,"password":password}),
+          login_request({"email":second_users_email,"password":password}),
+          return_exceptions=True
+        )
+
+        assert [response.status_code for response in responses] == [200,200] #type:ignore
+
+        async with test_session_factory() as session:
+            first_user_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(Session.user_id == first_user_id)
+            )
+
+            second_user_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(Session.user_id == second_user_id)
+            )
+
+            first_user_active_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(
+                    Session.user_id == first_user_id,
+                    Session.is_revoked.is_(False)
+                )
+            )
+
+            second_user_active_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(
+                    Session.user_id == second_user_id,
+                    Session.is_revoked.is_(False)
+                )
+            )
+
+            first_user_revoke_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(
+                    Session.user_id == first_user_id,
+                    Session.is_revoked.is_(True)
+                )
+            )
+
+            second_user_revoke_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(
+                    Session.user_id == second_user_id,
+                    Session.is_revoked.is_(True)
+                )
+            )
+      
+            total_session_count = await session.scalar(
+                select(func.count())
+                .select_from(Session)
+                .where(Session.user_id.in_(user_ids))
+            )
+
+            result = await session.scalars(
+                select(Session.id)
+                .where(Session.user_id.in_(user_ids))
+            ) 
+
+            session_ids = result.all()
+
+            total_jti_count = await session.scalar(
+                select(func.count())
+                .select_from(Session_Token_Jtis)
+                .where(Session_Token_Jtis.session_id.in_(session_ids))  
+            )
+
+        assert total_session_count == 2    
+        assert total_jti_count == 4
+
+        assert first_user_session_count == 1
+        assert second_user_session_count == 1
+        assert first_user_active_session_count == 1
+        assert second_user_active_session_count == 1
+        assert first_user_revoke_session_count == 0
+        assert second_user_revoke_session_count == 0
+
+  
+    
 
 
 
